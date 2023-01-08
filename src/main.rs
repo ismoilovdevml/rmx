@@ -42,14 +42,22 @@ fn remove_dir_contents(path: &str) -> i32 {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
+    if args.len() < 2 {
         eprintln!("Jildga path to'gri berilmagan");
         std::process::exit(-1);
     }
 
-    let start_time = Instant::now();
-    let all_files = remove_dir_contents(&args[1]);
-    let elapsed_time = start_time.elapsed();
-    println!("O'chirilgan fayllar: {}", all_files);
-    println!("O'chirish uchun ketgan vaqt: {:?}", elapsed_time);
+    let command = &args[1];
+    match command.as_ref() {
+        "tozalash" => {
+            let start_time = Instant::now();
+            let all_files = remove_dir_contents(&args[2]);
+            let elapsed_time = start_time.elapsed();
+            println!("O'chirilgan fayllar: {}", all_files);
+            println!("O'chirish uchun ketgan vaqt: {:?}", elapsed_time);
+        }
+        "help" => println!("Katta hajmdagi va juda katta miqdordagi fayllarni o'chirish uchun ishlab chiqiligan dastur"),
+        "dasturchi" => println!("Dasturchi: Otabek Ismoilov"),
+        _ => println!("Noma'lum buyruq: {}", command),
+    }
 }
