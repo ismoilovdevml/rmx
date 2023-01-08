@@ -1,10 +1,15 @@
 # Tezkor O'chirish
 Rewritten alternative rm in rust
 
-[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternativenidan](https://t.me/yetimdasturchi/1191) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternative dasturi
+
+![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rm-alternative.png)
 
 
-Ushbu dastur katta fayllarni tezkor o'chirish uchun mo'ljallangan
+
+[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternatividan](https://t.me/yetimdasturchi/1191) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternativ dasturi
+
+
+* Ushbu dastur katta fayllarni tezkor o'chirish uchun mo'ljallangan
 
 
 ## Dasturni test qilib ko'rish
@@ -58,10 +63,12 @@ Dasturni ishlatish uchun uni oldin kompilyatsiya qilib olamiz
 cargo build --release
 ```
 
-Endi es hozir yaratib olgan fake fayllarimizni o'chirib ko'ramiz 
+Endi esa hozir yaratib olgan fake fayllarimizni o'chirib ko'ramiz 
 
 ```bash
 ./target/release/rm /home/user/Desktop/test
 ```
+Fake fayllarni genratsiya qiluvchi dasturning muallifi [Manuchehr Usmonov](https://manu.uno/)
 
 
+Ajoyib, dastur hammada ishladi va foydali bo'ldi degan umiddaman :)
