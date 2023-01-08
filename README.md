@@ -36,3 +36,32 @@ done
 ```
 
 Quyidagi kodda men fake fayllarni `user/Desktop/test` jildida saqlashni kiritdim (Linuxda shunaqa path) bu yerda user ga foydalanuvchi nomi yoziladi xolos
+
+Endi fake fayllarni generatsiya qilish uchun dasturchi ishga tushiramiz
+
+```bash
+sh ./fake.sh
+```
+
+Endi sizda ko'p miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'chirib ko'ramiz
+
+
+Dasturni gitdan klon qilib olamiz
+
+```bash
+https://github.com/ismoilovdevml/alternative-rm.git
+```
+
+Dasturni ishlatish uchun uni oldin kompilyatsiya qilib olamiz
+
+```bash
+cargo build --release
+```
+
+Endi es hozir yaratib olgan fake fayllarimizni o'chirib ko'ramiz 
+
+```bash
+./target/release/rm /home/user/Desktop/test
+```
+
+
