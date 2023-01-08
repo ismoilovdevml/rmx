@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::time::Instant;
 
 fn concat(a: &str, b: &str) -> String {
     let mut con = String::from(a);
@@ -25,12 +26,12 @@ fn remove_dir_contents(path: &str) -> i32 {
                 count += remove_dir_contents(&full_path);
                 match fs::remove_dir(full_path) {
                     Ok(_) => count += 1,
-                    Err(_) => println!("Jildni o'chirishda xatolik:"),
+                    Err(_) => println!("Jildni o'chirishda xatolik"),
                 }
             } else {
                 match fs::remove_file(full_path) {
                     Ok(_) => count += 1,
-                    Err(_) => println!("Fayllarni o'chirishda xatolik:"),
+                    Err(_) => println!("Fayllarni o'chirishda xatolik"),
                 }
             }
         }
@@ -46,6 +47,9 @@ fn main() {
         std::process::exit(-1);
     }
 
+    let start_time = Instant::now();
     let all_files = remove_dir_contents(&args[1]);
+    let elapsed_time = start_time.elapsed();
     println!("O'chirilgan fayllar: {}", all_files);
+    println!("O'chirish uchun ketgan vaqt: {:?}", elapsed_time);
 }
