@@ -26,12 +26,12 @@ fn remove_dir_contents(path: &str) -> i32 {
                 count += remove_dir_contents(&full_path);
                 match fs::remove_dir(full_path) {
                     Ok(_) => count += 1,
-                    Err(_) => println!("Jildni o'chirishda xatolik"),
+                    Err(_) => println!("Error deleting directory"),
                 }
             } else {
                 match fs::remove_file(full_path) {
                     Ok(_) => count += 1,
-                    Err(_) => println!("Fayllarni o'chirishda xatolik"),
+                    Err(_) => println!("Error deleting file:"),
                 }
             }
         }
@@ -43,21 +43,28 @@ fn remove_dir_contents(path: &str) -> i32 {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Jildga path to'gri berilmagan");
+        eprintln!("The path to the folder is not correct");
         std::process::exit(-1);
     }
 
     let command = &args[1];
     match command.as_ref() {
-        "tozalash" => {
+        "rust-remover" => {
             let start_time = Instant::now();
             let all_files = remove_dir_contents(&args[2]);
             let elapsed_time = start_time.elapsed();
-            println!("O'chirilgan fayllar: {}", all_files);
-            println!("O'chirish uchun ketgan vaqt: {:?}", elapsed_time);
+            println!("Deleted files: {}", all_files);
+            println!("Time taken to delete:{:?}", elapsed_time);
         }
-        "help" => println!("Katta hajmdagi va juda katta miqdordagi fayllarni o'chirish uchun ishlab chiqiligan dastur"),
-        "dasturchi" => println!("Dasturchi: Otabek Ismoilov"),
-        _ => println!("Noma'lum buyruq: {}", command),
+        "about" => println!("
+A program designed to delete large and very large files \n
+ List of commands\n
+    - rust-remover  -- is the main command used to delete files \n
+    - about -- command that provides information about the program \n
+    - dev  -- Command that provides information about the Developer and the Program source code \n"),
+        "dev" => println!("
+Programmer: Otabek Ismoilov \n
+Source Code: https://github.com/ismoilovdevml/alternative-rm"),
+        _ => println!("Unknown command: {}", command),
     }
 }
