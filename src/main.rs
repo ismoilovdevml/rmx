@@ -49,7 +49,7 @@ fn main() {
 
     let command = &args[1];
     match command.as_ref() {
-        "rust-remover" => {
+        "rmx" => {
             let start_time = Instant::now();
             let all_files = remove_dir_contents(&args[2]);
             let elapsed_time = start_time.elapsed();
@@ -57,9 +57,9 @@ fn main() {
             println!("Time taken to delete:{:?}", elapsed_time);
         }
         "about" => println!("
-A program designed to delete large and very large files \n
+A program written in the Rust programming language for deleting large and very large files \n
  List of commands\n
-    - rust-remover  -- is the main command used to delete files \n
+    - rmx  -- is the main command used to delete files \n
     - about -- command that provides information about the program \n
     - dev  -- Command that provides information about the Developer and the Program source code \n"),
         "dev" => println!("

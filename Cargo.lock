@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "rm"
+name = "rmx"
 version = "0.1.0"
