@@ -1,6 +1,6 @@
 # Maintainer: Ismoilovdev <ismoilovdev@gmail.com>
 pkgname=rmx
-pkgver=1.0
+pkgver=0.1.0
 pkgrel=1
 pkgdesc='A program written in the Rust programming language for deleting large and very large files'
 url='https://github.com/ismoilovdevml/rmx'
