@@ -64,7 +64,7 @@ A program written in the Rust programming language for deleting large and very l
     - dev  -- Command that provides information about the Developer and the Program source code \n"),
         "dev" => println!("
 Programmer: Otabek Ismoilov \n
-Source Code: https://github.com/ismoilovdevml/alternative-rm"),
+Source Code: https://github.com/ismoilovdevml/rmx"),
         _ => println!("Unknown command: {}", command),
     }
 }
