@@ -11,7 +11,7 @@ license=('GPL3')
 makedepends=('cargo')
 depends=('git' 'pacman')
 optdepends=('asp: downloading repo pkgbuilds' 'bat: colored pkgbuild printing' 'devtools: build in chroot')
-sha256sums=('d1b672add198950a3b5fd5470b0775c56f859774a9fcff4fee73d912c9b2e60a')
+sha256sums=('7fb65a143b226bca1d54d58b544a4c484f04748bd38012feaef2e76226575e6d')
 
 build () {
   cd "$srcdir/$pkgname-$pkgver"
@@ -25,22 +25,22 @@ build () {
   fi
 
   cargo build --locked --features "${_features:-}" --release --target-dir target
-  # ./scripts/mkmo locale/
+  ./scripts/mkmo locale/
 }
 
 package() {
   cd "$srcdir/$pkgname-$pkgver"
 
   install -Dm755 target/release/rmx "${pkgdir}/usr/bin/rmx"
-  # install -Dm644 rmx.conf "${pkgdir}/etc/rmx.conf"
+  install -Dm644 rmx.conf "${pkgdir}/etc/rmx.conf"
 
-  # install -Dm644 man/rmx.8 "$pkgdir/usr/share/man/man8/rmx.8"
-  # install -Dm644 man/rmx.conf.5 "$pkgdir/usr/share/man/man5/rmx.conf.5"
+  install -Dm644 man/rmx.8 "$pkgdir/usr/share/man/man8/rmx.8"
+  install -Dm644 man/rmx.conf.5 "$pkgdir/usr/share/man/man5/rmx.conf.5"
 
-  # install -Dm644 completions/bash "${pkgdir}/usr/share/bash-completion/completions/rmx.bash"
-  # install -Dm644 completions/fish "${pkgdir}/usr/share/fish/vendor_completions.d/rmx.fish"
-  # install -Dm644 completions/zsh "${pkgdir}/usr/share/zsh/site-functions/_rmx"
+  install -Dm644 completions/bash "${pkgdir}/usr/share/bash-completion/completions/rmx.bash"
+  install -Dm644 completions/fish "${pkgdir}/usr/share/fish/vendor_completions.d/rmx.fish"
+  install -Dm644 completions/zsh "${pkgdir}/usr/share/zsh/site-functions/_rmx"
 
   install -d "$pkgdir/usr/share/"
-  # cp -r locale "$pkgdir/usr/share/"
+  cp -r locale "$pkgdir/usr/share/"
 }

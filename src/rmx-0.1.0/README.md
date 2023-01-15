@@ -1,8 +1,8 @@
-<h2 align="center">RMX</h2>
+# Tezkor O'chirish
 Rewritten alternative rm in rust
 
 
-![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx.png)
+![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rm-alternative.png)
 
 
 
@@ -66,7 +66,7 @@ cargo build --release
 Endi esa hozir yaratib olgan fake fayllarimizni o'chirib ko'ramiz 
 
 ```bash
-cargo run rmx /home/ismoilovdev/Desktop/test/
+./target/release/rm /home/user/Desktop/test
 ```
 Fake fayllarni genratsiya qiluvchi dasturning muallifi [Manuchehr Usmonov](https://manu.uno/)
 
