@@ -1,5 +1,6 @@
 <h2 align="center">RMX</h2>
-Rewritten alternative rm in rust
+
+<h4 align="center">Rewritten alternative rm in Rust</h4>
 
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx.png)
@@ -54,7 +55,7 @@ Endi sizda ko'p miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'c
 Dasturni klon qilib olamiz
 
 ```bash
-https://github.com/ismoilovdevml/alternative-rm.git
+https://github.com/ismoilovdevml/rmx.git
 ```
 
 Dasturni ishlatish uchun uni oldin kompilyatsiya qilib olamiz
