@@ -1,57 +1,10 @@
 use std::env;
-use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
 use termion::{color, style};
 
-fn concat(a: &str, b: &str) -> String {
-    let mut con = String::from(a);
-    con.push_str(b);
-    con
-}
-
-fn remove_dir_contents(path: &str) -> i32 {
-    let path = Path::new(path);
-    let mut count = 0;
-
-    if path.is_dir() {
-        for entry in fs::read_dir(path).unwrap() {
-            let entry = entry.unwrap();
-            let file_name = entry.file_name().into_string().unwrap();
-            if file_name.starts_with(".") || file_name == ".." {
-                continue;
-            }
-            let full_path = concat(path.to_str().unwrap(), "/");
-            let full_path = concat(&full_path, &file_name);
-            if entry.file_type().unwrap().is_dir() {
-                count += remove_dir_contents(&full_path);
-                match fs::remove_dir(full_path.clone()) {
-                    Ok(_) => count += 1,
-                    Err(_) => {
-                        println!("{}Error deleting directory: {}{}",
-                                 color::Fg(color::Red),
-                                 full_path,
-                                 style::Reset);
-                    }
-                }
-            } else {
-                match fs::remove_file(full_path.clone()) {
-                    Ok(_) => count += 1,
-                    Err(_) => {
-                        println!("{}Error deleting file: {}{}",
-                                 color::Fg(color::Red),
-                                 full_path,
-                                 style::Reset);
-                    }
-                }
-            }
-        }
-    }
-
-    count
-}
-
+use rmx::remove_dir_contents;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -64,7 +17,11 @@ fn main() {
     match command.as_ref() {
         "rmx" => {
             let start_time = Instant::now();
-            let all_files = remove_dir_contents(&args[2]);
+            let path = Path::new(&args[2]);
+            let all_files = remove_dir_contents(&path).unwrap_or_else(|e| {
+                eprintln!("{}Error deleting files: {}{}", color::Fg(color::Red), e, style::Reset);
+                std::process::exit(-1);
+            });
             let elapsed_time = start_time.elapsed();
             println!("{}Deleted files: {}{}",
                      color::Fg(color::Green),
