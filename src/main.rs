@@ -34,14 +34,17 @@ fn main() {
         }
         "about" => println!("{}A program written in the Rust programming language for deleting large and very large files \n
 List of commands\n
-- rmx  -- is the main command used to delete files \n
+- rmx   -- is the main command used to delete files \n
 - about -- command that provides information about the program \n
-- dev  -- Command that provides information about the Developer and the Program source code{}",
-                            color::Fg(color::Yellow),
+- dev   -- Command that provides information about the Developer and the Program source code{}",
+                            color::Fg(color::Green),
                             style::Reset),
         "dev" => println!("{}Programmer: Otabek Ismoilov \n
 Source Code: https://github.com/ismoilovdevml/rmx{}",
-                          color::Fg(color::Magenta),
+                          color::Fg(color::Green),
+                          style::Reset),
+        "version" => println!("{}rmx v0.2.0{}",
+                          color::Fg(color::Green),
                           style::Reset),
         _ => println!("{}Unknown command: {}{}",
                        color::Fg(color::Red),
