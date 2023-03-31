@@ -1,5 +1,5 @@
 pkgname=rmx
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="A program written in Rust for deleting large and very large files"
 arch=('x86_64')

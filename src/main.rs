@@ -15,7 +15,7 @@ fn main() {
 
     let command = &args[1];
     match command.as_ref() {
-        "rmx" => {
+        "rmx -r" => {
             let start_time = Instant::now();
             let path = Path::new(&args[2]);
             let all_files = remove_dir_contents(&path).unwrap_or_else(|e| {
