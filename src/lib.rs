@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path};
+use std::path::Path;
 
 pub fn remove_dir_contents(path: &Path) -> Result<usize, String> {
     let mut count = 0;
