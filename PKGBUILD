@@ -1,4 +1,5 @@
-pkgname=rmx
+_pkgname="rmx"
+pkgname="${_pkgname}"
 pkgver=0.2.0
 pkgrel=1
 pkgdesc="A program written in Rust for deleting large and very large files"
@@ -8,15 +9,17 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust')
 source=("${pkgname}-${pkgver}.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP') # Replace with the actual checksum
+sha256sums=('SKIP')
+
+maindirname="${_pkgname}-${pkgver}"
 
 build() {
-  cd "$srcdir/$pkgname-$pkgver"
+  cd "${srcdir}/${maindirname}"
   cargo build --release --locked
 }
 
 package() {
-  cd "$srcdir/$pkgname-$pkgver"
+  cd "${srcdir}/${maindirname}"
   install -Dm755 target/release/$pkgname "$pkgdir/usr/bin/$pkgname"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   
