@@ -8,7 +8,11 @@ edition = "2021"
 [dependencies]
 rayon = "1.7.0"
 termion = "2.0.1"
+
 [lib]
 name = "rmx_lib"
 path = "src/lib.rs"
+
+[dev-dependencies]
+tempfile = "3.2.0"
 

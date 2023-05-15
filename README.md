@@ -11,7 +11,7 @@
 
 
 
-[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternatividan](https://t.me/yetimdasturchi/1191) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternativ dasturi
+[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternatividan](https://telegra.ph/rm-remove-uchun-qolbola-alternativ-01-07) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternativ dasturi
 
 
 * Ushbu dastur katta fayllarni tezkor o'chirish uchun mo'ljallangan

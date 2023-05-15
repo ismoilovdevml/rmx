@@ -36,3 +36,35 @@ pub fn remove_dir_contents(path: &Path) -> Result<(usize, u64), String> {
 
     Ok((count, size))
 }
+
+
+#[cfg(test)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_remove_very_large_file() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+        let file_path = dir_path.join("large_testfile");
+        let mut file = File::create(file_path).unwrap();
+
+        for _ in 0..(1024 * 1024 * 1024) {
+            let large_string = "a".repeat(1024 * 1024);  // 1 Megabyte
+            writeln!(file, "{}", large_string).unwrap();
+        }
+
+        assert!(dir_path.join("large_testfile").exists());
+
+        let result = remove_dir_contents(dir_path);
+        assert!(result.is_ok());
+
+        assert!(fs::read_dir(dir_path).unwrap().next().is_none());
+    }
+}
+
+
