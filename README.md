@@ -9,6 +9,19 @@ RMX v0.3.0 va v0.2.0 versiyasidagi o'zgarishlar va farqlar.
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.3.0.png)
 
+>RMX v0.3.0 ko'satkichlari:
+```
+Deleted files: 55853
+Total size of deleted files: 108.83 GB
+Time taken to delete: 449.652106ms
+```
+>RMX v0.2.0 ko'satkichlari:
+```
+Total size of deleted files: 108.83 GB
+Deleted files: 55586
+Time taken to delete: 1.717631709s
+````
+
 <h4 align="center">RMX V0.3.0 version</h4>
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.3.0-view.png)
