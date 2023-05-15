@@ -6,7 +6,7 @@ use std::time::Instant;
 use termion::{color, style};
 
 use crate::util::bytes_to_readable;
-use crate::lib::remove_dir_contents;
+use rmx_lib::remove_dir_contents;
 
 pub fn execute_command(command: &str, path_str: Option<&str>) {
     match command {

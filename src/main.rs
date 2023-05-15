@@ -2,7 +2,6 @@
 
 mod args;
 mod commands;
-mod lib;
 mod util;
 
 fn main() {
