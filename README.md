@@ -51,8 +51,19 @@ cargo run rmx /home/ismoilovdev/Deesktop/test
 ```
 
  
+<h4 align="center">Kod sturukturasi</h4>
 
+Kod bazasi bir nechta modullarga ajratilgan:
 
+`main.rs` Bu dasturning kirish nuqtasi. U cli argumentlarini tahlil qiladi va kiritilgan ma'lumotlar asosida tegishli buyruq funktsiyasini chaqiradi. 
+
+`lib.rs` Ushbu faylda dasturning asosiy funksiyalari, jumladan, berilgan havola(path) ostidagi barcha fayllar va jildlarni rekursiv ravishda oʻchirib tashlaydigan `remove_dir_contents` funksiyasi mavjud.
+
+`commands.rs` Ushbu modul berilgan buyruqni talqin qilish va bajarish uchun javobgardir.
+
+`args.rs` Bu modulda cli argumentlarini tahlil qilish funksiyasi mavjud.
+
+`util.rs` Ushbu modul baytlarni o'qilishi mumkin bo'lgan formatga aylantirish kabi yordamchi funktsiyalarni o'z ichiga oladi.
 
 
 ## Dasturni test qilib ko'rish
@@ -65,53 +76,33 @@ Fake fayl generatsiya qiluvchi kod quyidagicha
 
 ```bash
 #!/bin/bash
-for (( i=0; i <= 1000; ++i ))
+
+echo "Number of files to generate"
+read files
+
+echo "Enter file path:"
+read path
+
+if [ ! -d "$path" ]; then
+  mkdir -p "$path"
+fi
+
+for (( i=0; i <= $files; ++i ))
 do
- tmpfile=$(mktemp /tmp/fake/abc-script.XXXXXXXXXXXXXXXXXXXXXXXXXX)
- dd if=/dev/urandom of=$tmpfile bs=1M count=$(expr 1 + $RANDOM % 3)
+ tmpfile=$(mktemp $path/abc-script.XXXXXXXXXXXXXXXXXXXXXXXXXX)
+ dd if=/dev/urandom of=$tmpfile bs=1M count=$(expr 1 + $RANDOM % 3) status=progress
 done
 ```
-
-Agar siz bu fake fayllarni `/tmp/fake/` dan boshqa joyda joylashtirmoqchi bo'lsangiz kodni quyidagiga o'zgartiting
-
-```bash
-#!/bin/bash
-for (( i=0; i <= 1000; ++i ))
-do
- tmpfile=$(mktemp /home/user/Desktop/test/abc-script.XXXXXXXXXXXXXXXXXXXXXXXXXX)
- dd if=/dev/urandom of=$tmpfile bs=1M count=$(expr 1 + $RANDOM % 3)
-done
-```
-
-Quyidagi kodda men fake fayllarni `user/Desktop/test` jildida saqlashni kiritdim (Linuxda shunaqa path) bu yerda user ga foydalanuvchi nomi yoziladi xolos
-
-Endi fake fayllarni generatsiya qilish uchun dasturni ishga tushiramiz
+Ushbu scriptni ishga tushirish uchun quyidagi buyruqlarni ushbu script turgan jildga terminal orqali kirib yozasiz.
 
 ```bash
-sh ./fake.sh
+chmod +x file-generator.sh
+./file-generator
 ```
-
-Endi sizda ko'p miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'chirib ko'ramiz
-
-
-Dasturni klon qilib olamiz
-
-```bash
-https://github.com/ismoilovdevml/rmx.git
-```
-
-Dasturni ishlatish uchun uni oldin kompilyatsiya qilib olamiz
-
-```bash
-cargo build --release
-```
-
-Endi esa hozir yaratib olgan fake fayllarimizni o'chirib ko'ramiz 
+Dastur sizdan qancha fayl yaratishini so'raydi siz kiritasi masalan 40000-ta.Qancha fayl yaratishni kiritganizdan keyin fayllarni qayerda generatsiya qilishn i so'raydi siz havola(path) berasiz. dastur ishini tugatganidan keyin sizda o'zingiz kiritgan miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'chirib ko'ramiz
 
 ```bash
 cargo run rmx /home/ismoilovdev/Desktop/test/
 ```
-Fake fayllarni genratsiya qiluvchi dasturning muallifi [Manuchehr Usmonov](https://manu.uno/)
+Fake fayllarni genaratsiya qiluvchi dasturning muallifi [Manuchehr Usmonov](https://manu.uno/) va dasturga o'zgartirishlar kiritildi.
 
-
-Ajoyib, dastur hammada ishladi va foydali bo'ldi degan umiddaman :)
