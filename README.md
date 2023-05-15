@@ -3,6 +3,16 @@
 <h4 align="center">Rewritten alternative rm in Rust</h4>
 
 
+<h4 align="center">RMX V0.3.0 version</h4>
+
+RMX v0.3.0 va v0.2.0 versiyasidagi o'zgarishlar va farqlar.
+
+![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.3.0.png)
+
+<h4 align="center">RMX V0.3.0 version</h4>
+
+![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.3.0-view.png)
+
 <h4 align="center">RMX V0.2.0 version</h4>
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.2.0.png)
@@ -65,10 +75,9 @@ Kod bazasi bir nechta modullarga ajratilgan:
 
 `util.rs` Ushbu modul baytlarni o'qilishi mumkin bo'lgan formatga aylantirish kabi yordamchi funktsiyalarni o'z ichiga oladi.
 
+<h4 align="center">Test</h4>
 
-## Dasturni test qilib ko'rish
-
-Keling dasturni test qilib ko'ramiz
+Keling dasturni test qilib ko'ramiz.
 
 Buning uchun bizga katta hajmdagi juda ko'p fayllar kerak xo'sh buni qayerdan olamiz. Biz fake fayl genereatsiya qiladigan kod yozamiz shell scriptda
 
