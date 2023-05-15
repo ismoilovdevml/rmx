@@ -11,10 +11,48 @@
 
 
 
-[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternatividan](https://telegra.ph/rm-remove-uchun-qolbola-alternativ-01-07) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternativ dasturi
+[Manuchehr Usmonov](https://github.com/yetimdasturchi)ning C dasturlash tilida yozilgan [rm alternatividan](https://telegra.ph/rm-remove-uchun-qolbola-alternativ-01-07) ilhomlangan holda Rust dasturlash tilida qayta yozilgan rm alternativ dasturi.
 
 
-* Ushbu dastur katta fayllarni tezkor o'chirish uchun mo'ljallangan
+`rmx` katta hajmdagi fayllar juda ko'p fayllarni va jildlarni o'chirish uchun Rustda yozilgan `CLI` dasturidir. Ushbu cli dastur, ayniqsa, tizimingizdan katta miqdordagi keraksiz fayllarni o'chirib tashlash orqali xotirani bo'shatish kerak bo'lganda foydalidir. U samarali ishlash uchun parallel ishlov berishdan foydalanadi va o'chirilgan fayllar soni va hajmi haqida malumot taqdim etadi.
+
+<h4 align="center">RMX qanday ishlaydi</h4>
+
+Asosiysi, rmx - bu jildlar bo'ylab harakatlanadigan, fayllar va sub-directorirelarni o'chiradigan rekursiv fayllarni o'chirish dasturi. U faylni o'chirishni parallellashtirish uchun [`rayon`](https://crates.io/crates/rayon) cratesidan foydalanadi va bu uni katta jildlar uchun samarali qiladi. Shuningdek, u o'chirilgan fayllarning umumiy sonini va hajmini hisoblab chiqadi va o'chirish operatsiyasidan so'ng sizga qisqacha ma'lumot beradi.
+
+Dasturning asosiy funktsiyasi cli argumentlarini o'qiydi, ularning haqiqiyligini tekshiradi va `commands` modulidagi `execute_command` funksiyasini chaqiradi. Bu funksiya berilgan buyruqni izohlaydi va tegishli amalni bajaradi.
+
+<h4 align="center">Foydalanish</h4>
+
+Dasturdan foydalnish uchun tizimingizda Rust o'rnatilgan bo'lishi kerak.
+
+Linux MacOs va unix oilasi uchun o'rnatish
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+Arch linux
+```bash
+yay -S rust
+```
+
+Dasturni ishga tushirish uchun loyihani githubdan tizmingizga ko'chirib oling
+
+```bash
+git clone https://github.com/ismoilovdevml/rmx 
+cd rmx
+cargo build --release
+```
+
+RMX bilan fayllarni o'chirish
+```bash
+cargo run rmx /faylga/havola/
+// namuna
+cargo run rmx /home/ismoilovdev/Deesktop/test
+```
+
+ 
+
+
 
 
 ## Dasturni test qilib ko'rish
