@@ -3,7 +3,7 @@
 <h4 align="center">Rewritten alternative rm in Rust</h4>
 
 
-<h4 align="center">RMX V2.0.0 version</h4>
+<h4 align="center">RMX V0.2.0 version</h4>
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.2.0.png)
 
