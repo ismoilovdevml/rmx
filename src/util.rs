@@ -1,5 +1,3 @@
-// util.rs
-
 pub fn bytes_to_readable(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;

@@ -1,5 +1,3 @@
-// main.rs
-
 mod args;
 mod commands;
 mod util;

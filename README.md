@@ -70,7 +70,7 @@ RMX bilan fayllarni o'chirish
 ```bash
 cargo run rmx /faylga/havola/
 // namuna
-cargo run rmx /home/ismoilovdev/Deesktop/test
+cargo run rmx /home/ismoilovdev/Desktop/test
 ```
 
  
@@ -121,7 +121,7 @@ Ushbu scriptni ishga tushirish uchun quyidagi buyruqlarni ushbu script turgan ji
 chmod +x file-generator.sh
 ./file-generator
 ```
-Dastur sizdan qancha fayl yaratishini so'raydi siz kiritasi masalan 40000-ta.Qancha fayl yaratishni kiritganizdan keyin fayllarni qayerda generatsiya qilishn i so'raydi siz havola(path) berasiz. dastur ishini tugatganidan keyin sizda o'zingiz kiritgan miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'chirib ko'ramiz
+Dastur sizdan qancha fayl yaratishini so'raydi siz kiritasiz masalan 40000-ta.Qancha fayl yaratishni kiritganizdan keyin fayllarni qayerda generatsiya qilishni so'raydi siz havola(path) berasiz. Dastur ishini tugatganidan keyin sizda o'zingiz kiritgan miqdorda fayllar bor buni endi Rustda yozilgan dastur orqali o'chirib ko'ramiz
 
 ```bash
 cargo run rmx /home/ismoilovdev/Desktop/test/

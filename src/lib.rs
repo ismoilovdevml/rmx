@@ -39,7 +39,6 @@ pub fn remove_dir_contents(path: &Path) -> Result<(usize, u64), String> {
 
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::File;
@@ -47,13 +46,14 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_remove_very_large_file() {
+    fn test_remove_large_file() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
         let file_path = dir_path.join("large_testfile");
         let mut file = File::create(file_path).unwrap();
 
-        for _ in 0..(1024 * 1024 * 1024) {
+        // 2 Gigabytes = 2 * 1024 Megabytes
+        for _ in 0..(2 * 1024) {
             let large_string = "a".repeat(1024 * 1024);  // 1 Megabyte
             writeln!(file, "{}", large_string).unwrap();
         }
@@ -63,8 +63,19 @@ mod tests {
         let result = remove_dir_contents(dir_path);
         assert!(result.is_ok());
 
-        assert!(fs::read_dir(dir_path).unwrap().next().is_none());
+        assert!(std::fs::read_dir(dir_path).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn test_file_deletion() {
+        let dir = tempdir().expect("Failed to create temporary directory");
+        let dir_path = dir.path();
+        for i in 0..5000 {
+            let file_path = dir_path.join(format!("file{}", i));
+            File::create(file_path).expect("Failed to create file");
+        }
+        let (files_removed, _) = remove_dir_contents(&dir_path).unwrap();
+        assert_eq!(files_removed, 5000);
+        dir.close().expect("Failed to close temporary directory");
     }
 }
-
-
