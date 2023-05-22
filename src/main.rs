@@ -6,18 +6,12 @@ fn main() {
     let args = args::parse_args();
 
     if args.len() < 2 {
-        eprintln!("The program name is not provided");
+        eprintln!("The path to the folder is not correct");
         std::process::exit(-1);
     }
 
     let command = &args[1];
-    if command != "rmx" {
-        eprintln!("Invalid command: expected 'rmx'");
-        std::process::exit(-1);
-    }
+    let path_str = args.get(2).map(|s| s.as_str());  // Convert &String to Option<&str>
 
-    for arg in args.iter().skip(2) {
-        let command_str = arg.strip_prefix('-');
-        commands::execute_command(command_str);
-    }
+    commands::execute_command(command, path_str);
 }

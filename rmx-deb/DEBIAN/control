@@ -1,8 +1,0 @@
-Package: rmx
-Version: 0.3.0
-Section: base
-Priority: optional
-Architecture: amd64
-Depends: 
-Maintainer: Otabek Ismoilov
-Description: A program written in the Rust programming language for deleting large and very large files
