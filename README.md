@@ -9,13 +9,13 @@ RMX v0.3.0 va v0.2.0 versiyasidagi o'zgarishlar va farqlar.
 
 ![alt text](https://github.com/ismoilovdevml/alternative-rm/blob/master/assets/rmx-v0.3.0.png)
 
->RMX v0.3.0 ko'satkichlari:
+>RMX v0.3.0 ko'rsatkichlari:
 ```
 Deleted files: 55853
 Total size of deleted files: 108.83 GB
 Time taken to delete: 449.652106ms
 ```
->RMX v0.2.0 ko'satkichlari:
+>RMX v0.2.0 ko'rsatkichlari:
 ```
 Total size of deleted files: 108.83 GB
 Deleted files: 55586
@@ -49,7 +49,7 @@ Dasturning asosiy funktsiyasi cli argumentlarini o'qiydi, ularning haqiqiyligini
 
 Dasturdan foydalnish uchun tizimingizda Rust o'rnatilgan bo'lishi kerak.
 
-Linux MacOs va unix oilasi uchun o'rnatish
+Linux MacOs va Unix oilasi uchun o'rnatish
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -78,7 +78,7 @@ cargo run rmx /home/ismoilovdev/Desktop/test
 
 Kod bazasi bir nechta modullarga ajratilgan:
 
-`main.rs` Bu dasturning kirish nuqtasi. U cli argumentlarini tahlil qiladi va kiritilgan ma'lumotlar asosida tegishli buyruq funktsiyasini chaqiradi. 
+`main.rs` Bu dasturning kirish nuqtasi. U cli argumentlarini tahlil qiladi va kiritilgan ma'lumotlar asosida tegishli buyruq funksiyasini chaqiradi. 
 
 `lib.rs` Ushbu faylda dasturning asosiy funksiyalari, jumladan, berilgan havola(path) ostidagi barcha fayllar va jildlarni rekursiv ravishda oʻchirib tashlaydigan `remove_dir_contents` funksiyasi mavjud.
 
