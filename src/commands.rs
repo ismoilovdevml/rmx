@@ -20,7 +20,7 @@ pub fn execute_command(command: &str, path_str: Option<&str>) {
                     );
                     std::process::exit(-1);
                 }
-                let (all_files, total_size) = match remove_dir_contents(&path) {
+                let (all_files, total_size) = match remove_dir_contents(path) {
                     Ok(result) => result,
                     Err(e) => {
                         eprintln!(

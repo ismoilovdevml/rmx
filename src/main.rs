@@ -11,7 +11,7 @@ fn main() {
     }
 
     let command = &args[1];
-    let path_str = args.get(2).map(|s| s.as_str());  // Convert &String to Option<&str>
+    let path_str = args.get(2).map(|s| s.as_str()); // Convert &String to Option<&str>
 
     commands::execute_command(command, path_str);
 }

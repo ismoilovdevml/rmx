@@ -1,6 +1,6 @@
+use rayon::prelude::*;
 use std::fs;
 use std::path::Path;
-use rayon::prelude::*;
 
 pub fn remove_dir_contents(path: &Path) -> Result<(usize, u64), String> {
     if !path.is_dir() {
@@ -35,12 +35,7 @@ pub fn remove_dir_contents(path: &Path) -> Result<(usize, u64), String> {
                 Some((1, file_size))
             }
         })
-        .reduce(
-            || (0, 0),
-            |a, b| (a.0 + b.0, a.1 + b.1)
-        );
+        .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
 
     Ok((count, size))
 }
-
-

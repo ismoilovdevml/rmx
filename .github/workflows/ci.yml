@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache target directory
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Check formatting
+      run: cargo fmt -- --check
+
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+
+    - name: Build debug
+      run: cargo build --verbose
+
+    - name: Build release
+      run: cargo build --release --verbose
+
+    - name: Check binary size
+      run: |
+        ls -lh target/release/rmx
+        SIZE=$(stat -f%z target/release/rmx 2>/dev/null || stat -c%s target/release/rmx)
+        echo "Binary size: $SIZE bytes"
+        if [ $SIZE -gt 1048576 ]; then
+          echo "⚠️  Warning: Binary size is larger than 1MB"
+        else
+          echo "✅ Binary size is optimal"
+        fi
+
+    - name: Run functional test
+      run: |
+        mkdir -p /tmp/rmx-test
+        for i in {1..100}; do
+          dd if=/dev/urandom of=/tmp/rmx-test/file_$i.dat bs=1024 count=10 2>/dev/null
+        done
+
+        echo "Testing rmx..."
+        ./target/release/rmx rmx /tmp/rmx-test
+
+        if [ -z "$(ls -A /tmp/rmx-test)" ]; then
+          echo "✅ Test passed: All files deleted"
+        else
+          echo "❌ Test failed: Files still exist"
+          exit 1
+        fi
+
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Build release
+      run: cargo build --release
+
+    - name: Run quick benchmark
+      run: |
+        echo "🚀 Quick Performance Test"
+
+        # Test 1: 1000 files × 100KB
+        mkdir -p /tmp/bench1
+        for i in {1..1000}; do
+          dd if=/dev/urandom of=/tmp/bench1/file_$i.dat bs=1024 count=100 2>/dev/null
+        done
+
+        echo "Testing RMX..."
+        time ./target/release/rmx rmx /tmp/bench1
+
+        echo "✅ Benchmark completed"
+
+  install-script:
+    name: Test Install Script
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Test install script syntax
+      run: |
+        bash -n install.sh
+        echo "✅ Install script syntax is valid"
+
+    - name: Test benchmark script syntax
+      run: |
+        bash -n benchmark.sh
+        echo "✅ Benchmark script syntax is valid"
