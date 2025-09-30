@@ -1,9 +1,11 @@
 [package]
 name = "rmx"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Otabek Ismoilov <contact@ismoilovdev.com>"]
+description = "Fast alternative to rm command written in Rust"
+license = "MIT"
+repository = "https://github.com/ismoilovdevml/rmx"
 
 [dependencies]
 rayon = "1.7.0"
@@ -13,6 +15,9 @@ termion = "2.0.1"
 name = "rmx_lib"
 path = "src/lib.rs"
 
-[dev-dependencies]
-tempfile = "3.2.0"
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
 

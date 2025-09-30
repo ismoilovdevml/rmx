@@ -85,7 +85,7 @@ Source Code: https://github.com/ismoilovdevml/rmx{}",
             style::Reset
         ),
         "version" => println!(
-            "{}rmx v0.3.0{}",
+            "{}rmx v0.4.0{}",
             color::Fg(color::LightGreen),
             style::Reset
         ),

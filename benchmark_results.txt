@@ -1,0 +1,88 @@
+=========================================
+🚀 RMX vs RM Performance Benchmark
+=========================================
+
+=========================================
+Test 1: Small files (10,000 files × 100KB)
+=========================================
+
+📦 Generating 10000 files (100 KB each) in /test/benchmark_rmx...
+✓ Generated 10000 files, Total size: 977M
+
+⚡ Testing RMX...
+Command: rmx /test/benchmark_rmx
+
+[38;5;10mDeleted files: 10000[m
+[38;5;10mTotal size of deleted files: 976.56 MB[m
+[38;5;10mTime taken to delete: 92.037875ms[m
+Real time: 0:00.09
+CPU usage: 1001%
+Max memory: 2904 KB
+
+📦 Generating 10000 files (100 KB each) in /test/benchmark_rm...
+✓ Generated 10000 files, Total size: 977M
+
+🗑️  Testing standard rm...
+Command: rm -rf /test/benchmark_rm
+
+Real time: 0:00.09
+CPU usage: 98%
+Max memory: 3728 KB
+
+=========================================
+Test 2: Large files (1,000 files × 10MB)
+=========================================
+
+📦 Generating 1000 files (10240 KB each) in /test/benchmark_rmx_large...
+✓ Generated 1000 files, Total size: 9.8G
+
+⚡ Testing RMX...
+Command: rmx /test/benchmark_rmx_large
+
+[38;5;10mDeleted files: 1000[m
+[38;5;10mTotal size of deleted files: 9.77 GB[m
+[38;5;10mTime taken to delete: 63.393791ms[m
+Real time: 0:00.06
+CPU usage: 1135%
+Max memory: 1880 KB
+
+📦 Generating 1000 files (10240 KB each) in /test/benchmark_rm_large...
+✓ Generated 1000 files, Total size: 9.8G
+
+🗑️  Testing standard rm...
+Command: rm -rf /test/benchmark_rm_large
+
+Real time: 0:00.21
+CPU usage: 99%
+Max memory: 1424 KB
+
+=========================================
+Test 3: Many small files (50,000 files × 10KB)
+=========================================
+
+📦 Generating 50000 files (10 KB each) in /test/benchmark_rmx_many...
+✓ Generated 50000 files, Total size: 588M
+
+⚡ Testing RMX...
+Command: rmx /test/benchmark_rmx_many
+
+[38;5;10mDeleted files: 50000[m
+[38;5;10mTotal size of deleted files: 488.28 MB[m
+[38;5;10mTime taken to delete: 293.624833ms[m
+Real time: 0:00.29
+CPU usage: 874%
+Max memory: 6868 KB
+
+📦 Generating 50000 files (10 KB each) in /test/benchmark_rm_many...
+✓ Generated 50000 files, Total size: 588M
+
+🗑️  Testing standard rm...
+Command: rm -rf /test/benchmark_rm_many
+
+Real time: 0:00.21
+CPU usage: 100%
+Max memory: 15128 KB
+
+=========================================
+✅ Benchmark completed!
+=========================================
