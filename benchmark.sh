@@ -36,7 +36,7 @@ benchmark_rmx() {
     echo ""
 
     /usr/bin/time -f "Real time: %E\nCPU usage: %P\nMax memory: %M KB" \
-        rmx rmx "$dir" 2>&1 | tee /tmp/rmx_output.txt
+        rmx "$dir" 2>&1 | tee /tmp/rmx_output.txt
 
     echo ""
 }
