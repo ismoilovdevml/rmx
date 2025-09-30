@@ -77,7 +77,7 @@ jobs:
         done
 
         echo "Testing rmx..."
-        ./target/release/rmx rmx /tmp/rmx-test
+        ./target/release/rmx /tmp/rmx-test
 
         if [ -z "$(ls -A /tmp/rmx-test)" ]; then
           echo "✅ Test passed: All files deleted"
@@ -113,7 +113,7 @@ jobs:
         done
 
         echo "Testing RMX..."
-        time ./target/release/rmx rmx /tmp/bench1
+        time ./target/release/rmx /tmp/bench1
 
         echo "✅ Benchmark completed"
 
