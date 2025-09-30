@@ -88,25 +88,11 @@ cargo build --release
 cargo run -- rmx /path/to/directory
 ```
 
-### Code Structure
-```
-src/
-├── main.rs      - Entry point
-├── lib.rs       - Core deletion logic
-├── commands.rs  - Command handling
-├── args.rs      - Argument parsing
-└── util.rs      - Helper functions
-```
 
 ## 📝 License
 
 MIT License - see [LICENSE](LICENSE) file
 
-## 👨‍💻 Author
-
-**Otabek Ismoilov**
-- GitHub: [@ismoilovdevml](https://github.com/ismoilovdevml)
-- Website: [ismoilovdev.com](https://ismoilovdev.com)
 
 ## 🙏 Credits
 
