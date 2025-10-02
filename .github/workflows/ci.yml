@@ -76,13 +76,13 @@ jobs:
           dd if=/dev/urandom of=/tmp/rmx-test/file_$i.dat bs=1024 count=10 2>/dev/null
         done
 
-        echo "Testing rmx..."
-        ./target/release/rmx /tmp/rmx-test
+        echo "Testing rmx with -r flag..."
+        ./target/release/rmx -r /tmp/rmx-test
 
-        if [ -z "$(ls -A /tmp/rmx-test)" ]; then
-          echo "✅ Test passed: All files deleted"
+        if [ ! -d /tmp/rmx-test ]; then
+          echo "✅ Test passed: Directory deleted"
         else
-          echo "❌ Test failed: Files still exist"
+          echo "❌ Test failed: Directory still exists"
           exit 1
         fi
 
@@ -113,7 +113,7 @@ jobs:
         done
 
         echo "Testing RMX..."
-        time ./target/release/rmx /tmp/bench1
+        time ./target/release/rmx -rf /tmp/bench1
 
         echo "✅ Benchmark completed"
 

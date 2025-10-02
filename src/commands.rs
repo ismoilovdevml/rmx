@@ -83,7 +83,11 @@ fn handle_directory(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> 
                     if args.force {
                         Ok(stats)
                     } else {
-                        Err(format!("Cannot remove directory '{}': {}", path.display(), e))
+                        Err(format!(
+                            "Cannot remove directory '{}': {}",
+                            path.display(),
+                            e
+                        ))
                     }
                 }
             }

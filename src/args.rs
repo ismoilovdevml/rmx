@@ -3,11 +3,11 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct RmxArgs {
     pub paths: Vec<String>,
-    pub recursive: bool,      // -r, -R, --recursive
-    pub force: bool,          // -f, --force
-    pub interactive: bool,    // -i, --interactive
-    pub verbose: bool,        // -v, --verbose
-    pub dir: bool,            // -d, --dir (remove empty directories)
+    pub recursive: bool,   // -r, -R, --recursive
+    pub force: bool,       // -f, --force
+    pub interactive: bool, // -i, --interactive
+    pub verbose: bool,     // -v, --verbose
+    pub dir: bool,         // -d, --dir (remove empty directories)
 }
 
 impl Default for RmxArgs {

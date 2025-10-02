@@ -80,7 +80,11 @@ pub fn remove_directory_recursive(
             if force {
                 return Ok(total_stats);
             }
-            return Err(format!("Failed to read directory '{}': {}", path.display(), e));
+            return Err(format!(
+                "Failed to read directory '{}': {}",
+                path.display(),
+                e
+            ));
         }
     };
 
@@ -115,7 +119,11 @@ pub fn remove_directory_recursive(
                         if force {
                             Ok(stats)
                         } else {
-                            Err(format!("Cannot remove directory '{}': {}", path.display(), e))
+                            Err(format!(
+                                "Cannot remove directory '{}': {}",
+                                path.display(),
+                                e
+                            ))
                         }
                     }
                 }
@@ -138,7 +146,11 @@ pub fn remove_directory_recursive(
 }
 
 /// Remove empty directory
-pub fn remove_empty_directory(path: &Path, verbose: bool, force: bool) -> Result<DeleteStats, String> {
+pub fn remove_empty_directory(
+    path: &Path,
+    verbose: bool,
+    force: bool,
+) -> Result<DeleteStats, String> {
     let mut stats = DeleteStats::new();
 
     match fs::remove_dir(path) {
@@ -153,7 +165,11 @@ pub fn remove_empty_directory(path: &Path, verbose: bool, force: bool) -> Result
             if force {
                 Ok(stats)
             } else {
-                Err(format!("Cannot remove directory '{}': {}", path.display(), e))
+                Err(format!(
+                    "Cannot remove directory '{}': {}",
+                    path.display(),
+                    e
+                ))
             }
         }
     }
@@ -181,7 +197,11 @@ pub fn prompt_user(path: &Path, is_dir: bool) -> bool {
 }
 
 /// Remove file with interactive mode
-pub fn remove_file_interactive(path: &Path, verbose: bool, force: bool) -> Result<DeleteStats, String> {
+pub fn remove_file_interactive(
+    path: &Path,
+    verbose: bool,
+    force: bool,
+) -> Result<DeleteStats, String> {
     if prompt_user(path, false) {
         remove_file(path, verbose, force)
     } else {
@@ -209,7 +229,11 @@ pub fn remove_directory_interactive(
                 if force {
                     Ok(stats)
                 } else {
-                    Err(format!("Cannot remove directory '{}': {}", path.display(), e))
+                    Err(format!(
+                        "Cannot remove directory '{}': {}",
+                        path.display(),
+                        e
+                    ))
                 }
             }
         }
