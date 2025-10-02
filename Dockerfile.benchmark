@@ -1,0 +1,25 @@
+FROM rust:1.85-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    time \
+    bc \
+    coreutils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /benchmark
+
+# Copy source code
+COPY . .
+
+# Build rmx in release mode
+RUN cargo build --release
+
+# Copy binary to /usr/local/bin
+RUN cp target/release/rmx /usr/local/bin/rmx
+
+# Create benchmark script
+COPY benchmark.sh /benchmark/
+RUN chmod +x /benchmark/benchmark.sh
+
+CMD ["/benchmark/benchmark.sh"]

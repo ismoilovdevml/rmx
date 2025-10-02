@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  rmx-benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    container_name: rmx_benchmark
+    volumes:
+      - ./results:/benchmark/results
+    privileged: true

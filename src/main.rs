@@ -3,36 +3,45 @@ mod commands;
 mod util;
 
 fn main() {
-    let args = args::parse_args();
+    let raw_args = args::parse_args();
 
-    // rmx binary nomi args[0] da
-    if args.len() < 2 {
-        commands::print_help();
-        std::process::exit(1);
+    // Check for special commands first
+    if raw_args.len() >= 2 {
+        let first_arg = &raw_args[1];
+
+        match first_arg.as_str() {
+            "--version" | "-v" => {
+                commands::print_version();
+                return;
+            }
+            "--help" | "-h" | "help" => {
+                commands::print_help();
+                return;
+            }
+            "version" => {
+                commands::print_version();
+                return;
+            }
+            "about" => {
+                commands::print_about();
+                return;
+            }
+            "dev" => {
+                commands::print_dev();
+                return;
+            }
+            _ => {}
+        }
     }
 
-    let first_arg = &args[1];
-
-    // Check for flags and special commands
-    match first_arg.as_str() {
-        "--version" | "-v" => {
-            commands::print_version();
+    // Parse flags and paths
+    match args::parse_flags(&raw_args) {
+        Some(parsed_args) => {
+            commands::execute_removal(&parsed_args);
         }
-        "--help" | "-h" | "help" => {
+        None => {
             commands::print_help();
-        }
-        "version" => {
-            commands::print_version();
-        }
-        "about" => {
-            commands::print_about();
-        }
-        "dev" => {
-            commands::print_dev();
-        }
-        _ => {
-            // Default: treat first argument as path
-            commands::delete_directory(first_arg);
+            std::process::exit(1);
         }
     }
 }
