@@ -1,6 +1,6 @@
 use std::env;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RmxArgs {
     pub paths: Vec<String>,
     pub recursive: bool,   // -r, -R, --recursive
@@ -8,19 +8,6 @@ pub struct RmxArgs {
     pub interactive: bool, // -i, --interactive
     pub verbose: bool,     // -v, --verbose
     pub dir: bool,         // -d, --dir (remove empty directories)
-}
-
-impl Default for RmxArgs {
-    fn default() -> Self {
-        RmxArgs {
-            paths: Vec::new(),
-            recursive: false,
-            force: false,
-            interactive: false,
-            verbose: false,
-            dir: false,
-        }
-    }
 }
 
 pub fn parse_args() -> Vec<String> {

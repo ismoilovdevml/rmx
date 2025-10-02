@@ -10,6 +10,12 @@ pub struct DeleteStats {
     pub total_size: u64,
 }
 
+impl Default for DeleteStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeleteStats {
     pub fn new() -> Self {
         DeleteStats {
