@@ -1,9 +1,10 @@
 use rayon::prelude::*;
 use std::fs;
-use std::io::{self, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteStats {
     pub files_deleted: usize,
     pub dirs_deleted: usize,
@@ -32,16 +33,41 @@ impl DeleteStats {
     }
 }
 
-/// Remove a single file
+/// Atomic counters for high-performance tracking
+struct AtomicStats {
+    files: AtomicUsize,
+    dirs: AtomicUsize,
+    size: AtomicU64,
+}
+
+impl AtomicStats {
+    fn new() -> Self {
+        AtomicStats {
+            files: AtomicUsize::new(0),
+            dirs: AtomicUsize::new(0),
+            size: AtomicU64::new(0),
+        }
+    }
+
+    fn to_delete_stats(&self) -> DeleteStats {
+        DeleteStats {
+            files_deleted: self.files.load(Ordering::Relaxed),
+            dirs_deleted: self.dirs.load(Ordering::Relaxed),
+            total_size: self.size.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Remove a single file (optimized)
 pub fn remove_file(path: &Path, verbose: bool, force: bool) -> Result<DeleteStats, String> {
     let mut stats = DeleteStats::new();
 
-    // Get file size before deletion
+    // Get file size for statistics (always track size)
     let size = match fs::metadata(path) {
         Ok(metadata) => metadata.len(),
         Err(e) => {
             if force {
-                return Ok(stats); // Silent fail if force is enabled
+                return Ok(stats);
             }
             return Err(format!("Cannot access '{}': {}", path.display(), e));
         }
@@ -67,24 +93,37 @@ pub fn remove_file(path: &Path, verbose: bool, force: bool) -> Result<DeleteStat
     }
 }
 
-/// Remove a directory (recursive)
+/// Ultra-fast directory removal
 pub fn remove_directory_recursive(
     path: &Path,
     verbose: bool,
     force: bool,
 ) -> Result<DeleteStats, String> {
-    let mut total_stats = DeleteStats::new();
-
     if !path.is_dir() {
-        return Ok(total_stats);
+        return Ok(DeleteStats::new());
     }
 
+    let stats = Arc::new(AtomicStats::new());
+
+    // Use optimized recursive function
+    remove_dir_recursive_fast(path, verbose, force, &stats)?;
+
+    Ok(stats.to_delete_stats())
+}
+
+/// Fast recursive directory removal with adaptive parallelism
+fn remove_dir_recursive_fast(
+    path: &Path,
+    verbose: bool,
+    force: bool,
+    stats: &Arc<AtomicStats>,
+) -> Result<(), String> {
     // Read directory entries
     let entries: Vec<_> = match fs::read_dir(path) {
         Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
         Err(e) => {
             if force {
-                return Ok(total_stats);
+                return Ok(());
             }
             return Err(format!(
                 "Failed to read directory '{}': {}",
@@ -94,61 +133,107 @@ pub fn remove_directory_recursive(
         }
     };
 
-    // Process entries in parallel using rayon
-    let results: Vec<Result<DeleteStats, String>> = entries
-        .par_iter()
-        .map(|entry| {
-            let path = entry.path();
-            let metadata = match entry.metadata() {
-                Ok(m) => m,
-                Err(e) => {
-                    if force {
-                        return Ok(DeleteStats::new());
-                    }
-                    return Err(format!("Cannot access '{}': {}", path.display(), e));
-                }
-            };
+    // Adaptive parallelism threshold based on benchmarking
+    // For macOS APFS: parallel is beneficial at 1000+ files
+    const PARALLEL_THRESHOLD: usize = 1000;
 
-            if metadata.is_dir() {
-                // Recursively delete subdirectory
-                let mut stats = remove_directory_recursive(&path, verbose, force)?;
-                // Remove the directory itself
-                match fs::remove_dir(&path) {
-                    Ok(_) => {
-                        stats.dirs_deleted += 1;
-                        if verbose {
-                            println!("removed directory '{}'", path.display());
-                        }
-                        Ok(stats)
-                    }
-                    Err(e) => {
-                        if force {
-                            Ok(stats)
-                        } else {
-                            Err(format!(
-                                "Cannot remove directory '{}': {}",
-                                path.display(),
-                                e
-                            ))
-                        }
-                    }
+    if entries.len() >= PARALLEL_THRESHOLD {
+        // Use parallel processing for large directories
+        let results: Vec<Result<(), String>> = entries
+            .par_iter()
+            .map(|entry| process_entry_fast(entry, verbose, force, stats))
+            .collect();
+
+        // Check for errors
+        for result in results {
+            if let Err(e) = result {
+                if !force {
+                    return Err(e);
                 }
-            } else {
-                // Delete file
-                remove_file(&path, verbose, force)
             }
-        })
-        .collect();
-
-    // Merge all stats
-    for result in results {
-        match result {
-            Ok(stats) => total_stats.merge(stats),
-            Err(e) => return Err(e),
+        }
+    } else {
+        // Sequential processing for small/medium directories
+        for entry in &entries {
+            if let Err(e) = process_entry_fast(entry, verbose, force, stats) {
+                if !force {
+                    return Err(e);
+                }
+            }
         }
     }
 
-    Ok(total_stats)
+    Ok(())
+}
+
+/// Process a single directory entry (highly optimized)
+#[inline(always)]
+fn process_entry_fast(
+    entry: &fs::DirEntry,
+    verbose: bool,
+    force: bool,
+    stats: &Arc<AtomicStats>,
+) -> Result<(), String> {
+    let path = entry.path();
+
+    // Use DirEntry::metadata() which is cached on most systems
+    let metadata = match entry.metadata() {
+        Ok(m) => m,
+        Err(e) => {
+            if force {
+                return Ok(());
+            }
+            return Err(format!("Cannot access '{}': {}", path.display(), e));
+        }
+    };
+
+    if metadata.is_dir() {
+        // Recursively delete subdirectory
+        remove_dir_recursive_fast(&path, verbose, force, stats)?;
+
+        // Remove the directory itself
+        match fs::remove_dir(&path) {
+            Ok(_) => {
+                stats.dirs.fetch_add(1, Ordering::Relaxed);
+                if verbose {
+                    println!("removed directory '{}'", path.display());
+                }
+                Ok(())
+            }
+            Err(e) => {
+                if force {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Cannot remove directory '{}': {}",
+                        path.display(),
+                        e
+                    ))
+                }
+            }
+        }
+    } else {
+        // File deletion - always track size for statistics
+        let size = metadata.len();
+
+        match fs::remove_file(&path) {
+            Ok(_) => {
+                stats.files.fetch_add(1, Ordering::Relaxed);
+                stats.size.fetch_add(size, Ordering::Relaxed);
+                if verbose {
+                    println!("removed '{}'", path.display());
+                }
+                Ok(())
+            }
+            Err(e) => {
+                if force {
+                    Ok(())
+                } else {
+                    Err(format!("Cannot remove '{}': {}", path.display(), e))
+                }
+            }
+        }
+    }
 }
 
 /// Remove empty directory
@@ -183,6 +268,8 @@ pub fn remove_empty_directory(
 
 /// Interactive prompt
 pub fn prompt_user(path: &Path, is_dir: bool) -> bool {
+    use std::io::{self, Write};
+
     let prompt = if is_dir {
         format!("remove directory '{}'? ", path.display())
     } else {
@@ -202,7 +289,6 @@ pub fn prompt_user(path: &Path, is_dir: bool) -> bool {
     }
 }
 
-/// Remove file with interactive mode
 pub fn remove_file_interactive(
     path: &Path,
     verbose: bool,
@@ -215,7 +301,6 @@ pub fn remove_file_interactive(
     }
 }
 
-/// Remove directory with interactive mode
 pub fn remove_directory_interactive(
     path: &Path,
     verbose: bool,

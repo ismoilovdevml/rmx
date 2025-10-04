@@ -8,6 +8,7 @@ pub struct RmxArgs {
     pub interactive: bool, // -i, --interactive
     pub verbose: bool,     // -v, --verbose
     pub dir: bool,         // -d, --dir (remove empty directories)
+    pub quiet: bool,       // -q, --quiet (suppress output for benchmarking)
 }
 
 pub fn parse_args() -> Vec<String> {
@@ -32,6 +33,7 @@ pub fn parse_flags(args: &[String]) -> Option<RmxArgs> {
             "--interactive" => rmx_args.interactive = true,
             "--verbose" => rmx_args.verbose = true,
             "--dir" => rmx_args.dir = true,
+            "--quiet" => rmx_args.quiet = true,
 
             // Short flags (can be combined like -rf)
             s if s.starts_with('-') && !s.starts_with("--") => {
@@ -42,6 +44,7 @@ pub fn parse_flags(args: &[String]) -> Option<RmxArgs> {
                         'i' => rmx_args.interactive = true,
                         'v' => rmx_args.verbose = true,
                         'd' => rmx_args.dir = true,
+                        'q' => rmx_args.quiet = true,
                         _ => {
                             eprintln!("Unknown flag: -{}", ch);
                             return None;

@@ -104,27 +104,51 @@ fn handle_directory(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> 
 }
 
 fn print_summary(stats: &DeleteStats, elapsed_time: std::time::Duration, verbose: bool) {
-    if (stats.files_deleted > 0 || stats.dirs_deleted > 0) && !verbose {
-        // Only print summary if not in verbose mode
-        println!(
-            "{}✓ Deleted: {} files, {} directories{}",
-            color::Fg(color::LightGreen),
-            stats.files_deleted,
-            stats.dirs_deleted,
-            style::Reset
-        );
-        println!(
-            "{}✓ Total size: {}{}",
-            color::Fg(color::LightGreen),
-            bytes_to_readable(stats.total_size),
-            style::Reset
-        );
-        println!(
-            "{}✓ Time taken: {:.2?}{}",
-            color::Fg(color::LightGreen),
-            elapsed_time,
-            style::Reset
-        );
+    // Always show summary if files were deleted (unless quiet mode is active in future)
+    if stats.files_deleted > 0 || stats.dirs_deleted > 0 {
+        if !verbose {
+            // Compact summary for non-verbose mode
+            println!(
+                "{}✓ Deleted: {} files, {} directories{}",
+                color::Fg(color::LightGreen),
+                stats.files_deleted,
+                stats.dirs_deleted,
+                style::Reset
+            );
+            println!(
+                "{}✓ Total size: {}{}",
+                color::Fg(color::LightGreen),
+                bytes_to_readable(stats.total_size),
+                style::Reset
+            );
+            println!(
+                "{}✓ Time taken: {:.2?}{}",
+                color::Fg(color::LightGreen),
+                elapsed_time,
+                style::Reset
+            );
+        } else {
+            // Verbose mode shows individual file deletions + summary
+            println!(
+                "{}✓ Deleted: {} files, {} directories{}",
+                color::Fg(color::LightGreen),
+                stats.files_deleted,
+                stats.dirs_deleted,
+                style::Reset
+            );
+            println!(
+                "{}✓ Total size: {}{}",
+                color::Fg(color::LightGreen),
+                bytes_to_readable(stats.total_size),
+                style::Reset
+            );
+            println!(
+                "{}✓ Time taken: {:.2?}{}",
+                color::Fg(color::LightGreen),
+                elapsed_time,
+                style::Reset
+            );
+        }
     }
 }
 
