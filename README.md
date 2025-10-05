@@ -19,7 +19,7 @@
 ### Quick Install (Linux & macOS)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ismoilovdevml/rmx/master/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ismoilovdevml/rmx/main/install.sh | bash
 ```
 
 ### Manual Installation
