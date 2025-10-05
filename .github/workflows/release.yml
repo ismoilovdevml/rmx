@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Linux musl builds (static binaries)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: false
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            cross: true
+
+          # macOS builds
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            cross: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            cross: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Install musl tools (Linux)
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install cross (for ARM Linux)
+        if: matrix.cross
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build with cross
+        if: matrix.cross
+        run: |
+          cross build --release --target ${{ matrix.target }}
+
+      - name: Build native
+        if: ${{ !matrix.cross }}
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux)
+        if: contains(matrix.target, 'linux')
+        run: |
+          strip target/${{ matrix.target }}/release/rmx || true
+
+      - name: Strip binary (macOS)
+        if: contains(matrix.target, 'darwin')
+        run: |
+          strip target/${{ matrix.target }}/release/rmx || true
+
+      - name: Create archive
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf rmx-${{ matrix.target }}.tar.gz rmx
+          mv rmx-${{ matrix.target }}.tar.gz ${{ github.workspace }}/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rmx-${{ matrix.target }}
+          path: rmx-${{ matrix.target }}.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move artifacts to root
+        run: |
+          find artifacts -name "*.tar.gz" -exec mv {} . \;
+          ls -lh *.tar.gz
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            *.tar.gz
+          body: |
+            ## RMX ${{ github.ref_name }}
+
+            ### 📥 Installation
+
+            **Linux (x86_64):**
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/master/install.sh | bash
+            ```
+
+            **macOS (Intel/Apple Silicon):**
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/master/install.sh | bash
+            ```
+
+            ### 📦 Pre-built Binaries
+
+            Download the appropriate binary for your platform:
+            - `rmx-x86_64-unknown-linux-musl.tar.gz` - Linux x86_64 (static binary)
+            - `rmx-aarch64-unknown-linux-musl.tar.gz` - Linux ARM64 (static binary)
+            - `rmx-x86_64-apple-darwin.tar.gz` - macOS Intel
+            - `rmx-aarch64-apple-darwin.tar.gz` - macOS Apple Silicon
+
+            ### 🚀 What's Changed
+
+            See commits for details.
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

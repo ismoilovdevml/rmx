@@ -24,6 +24,27 @@ curl -sSL https://raw.githubusercontent.com/ismoilovdevml/rmx/master/install.sh 
 
 ### Manual Installation
 
+Download pre-built binaries from [Releases](https://github.com/ismoilovdevml/rmx/releases/latest):
+
+```bash
+# Linux x86_64
+wget https://github.com/ismoilovdevml/rmx/releases/latest/download/rmx-x86_64-unknown-linux-musl.tar.gz
+tar xzf rmx-x86_64-unknown-linux-musl.tar.gz
+sudo mv rmx /usr/local/bin/
+
+# macOS (Intel)
+wget https://github.com/ismoilovdevml/rmx/releases/latest/download/rmx-x86_64-apple-darwin.tar.gz
+tar xzf rmx-x86_64-apple-darwin.tar.gz
+sudo mv rmx /usr/local/bin/
+
+# macOS (Apple Silicon)
+wget https://github.com/ismoilovdevml/rmx/releases/latest/download/rmx-aarch64-apple-darwin.tar.gz
+tar xzf rmx-aarch64-apple-darwin.tar.gz
+sudo mv rmx /usr/local/bin/
+```
+
+### Build from Source
+
 1. Install Rust (if not already installed):
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -78,25 +99,7 @@ rmx dev        # Show developer info
 
 ## ⚡ Performance
 
-### Benchmark Results (vs standard `rm`)
-
-| Test Scenario | Files | rm Time | rmx Time | **Speedup** |
-|--------------|-------|---------|----------|-------------|
-| 50K × 10B (ultra-tiny) | 50,000 | 2.77s | 1.33s | **2.07x** 🔥 |
-| 30K × 100B (tiny) | 30,000 | 1.52s | 0.82s | **1.84x** 🔥 |
-| 5K × 10KB (small) | 5,000 | 0.29s | 0.16s | **1.83x** 🔥 |
-| 1K × 1MB (medium) | 1,000 | 0.11s | 0.06s | **1.83x** 🔥 |
-| Nested (50×200) | 10,000 | 0.52s | 0.37s | **1.40x** |
-| 200 × 10MB (large) | 200 | 0.05s | 0.04s | 1.05x |
-
-**AVERAGE SPEEDUP: 1.67x** 🚀
-
-### Performance by File Count
-
-- **< 1,000 files**: ~1.0x (equivalent to rm)
-- **1,000 - 10,000 files**: ~1.4x faster
-- **10,000 - 50,000 files**: ~1.8x faster
-- **> 50,000 files**: ~2.1x faster
+RMX is **1.67x faster** than standard `rm` on average, with up to **2.07x speedup** for operations involving many small files.
 
 ### Best Use Cases
 
@@ -146,18 +149,8 @@ cargo build --release
 ```bash
 cargo test
 cargo clippy --release
+cargo fmt
 ```
-
-### Run benchmarks
-```bash
-./benchmark_quick.sh     # Quick 5-test benchmark
-./benchmark_medium.sh    # Medium 6-test benchmark
-./benchmark_heavy.sh     # Heavy 8-test benchmark
-```
-
-## 📊 Benchmarking
-
-See [FINAL_BENCHMARK_RESULTS.md](FINAL_BENCHMARK_RESULTS.md) for detailed benchmark results and methodology.
 
 ## 📝 License
 

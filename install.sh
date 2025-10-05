@@ -12,7 +12,7 @@ echo ""
 detect_os() {
     case "$(uname -s)" in
         Linux*)     echo "linux";;
-        Darwin*)    echo "macos";;
+        Darwin*)    echo "darwin";;
         *)          echo "unknown";;
     esac
 }
@@ -36,51 +36,76 @@ fi
 
 echo "✓ Detected: $OS ($ARCH)"
 
-if ! command -v cargo &> /dev/null; then
-    echo "⚠️  Rust not found. Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
+# Determine target triple
+if [ "$OS" = "linux" ]; then
+    TARGET="${ARCH}-unknown-linux-musl"
+elif [ "$OS" = "darwin" ]; then
+    TARGET="${ARCH}-apple-darwin"
 else
-    echo "✓ Rust is already installed"
+    echo "❌ Unsupported operating system: $OS"
+    exit 1
 fi
+
+echo "📦 Target: $TARGET"
+
+# Get latest release version
+echo "🔍 Fetching latest release..."
+LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+if [ -z "$LATEST_RELEASE" ]; then
+    echo "❌ Could not fetch latest release"
+    exit 1
+fi
+
+echo "✓ Latest version: $LATEST_RELEASE"
+
+# Download URL
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/rmx-${TARGET}.tar.gz"
+
+echo "📥 Downloading $BINARY_NAME from $DOWNLOAD_URL..."
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
-echo "📦 Downloading RMX..."
-git clone --depth=1 https://github.com/$REPO.git
-cd rmx
-
-echo "🔨 Building RMX (optimized release)..."
-cargo build --release
-
-BINARY_PATH="target/release/$BINARY_NAME"
-
-if [ ! -f "$BINARY_PATH" ]; then
-    echo "❌ Build failed"
+# Download binary
+if ! curl -sSL -o "rmx.tar.gz" "$DOWNLOAD_URL"; then
+    echo "❌ Download failed"
+    echo "URL: $DOWNLOAD_URL"
     exit 1
 fi
 
+# Extract binary
+echo "📦 Extracting..."
+tar xzf rmx.tar.gz
+
+if [ ! -f "$BINARY_NAME" ]; then
+    echo "❌ Binary not found in archive"
+    exit 1
+fi
+
+# Make it executable
+chmod +x "$BINARY_NAME"
+
+# Install binary
 echo "📋 Installing to $INSTALL_DIR..."
 
 if [ -w "$INSTALL_DIR" ]; then
-    cp "$BINARY_PATH" "$INSTALL_DIR/"
+    mv "$BINARY_NAME" "$INSTALL_DIR/"
 else
     echo "🔐 Need sudo access to install to $INSTALL_DIR"
-    sudo cp "$BINARY_PATH" "$INSTALL_DIR/"
+    sudo mv "$BINARY_NAME" "$INSTALL_DIR/"
 fi
 
-chmod +x "$INSTALL_DIR/$BINARY_NAME"
-
+# Cleanup
 cd ~
 rm -rf "$TEMP_DIR"
 
 echo ""
-echo "✅ RMX installed successfully!"
+echo "✅ RMX $LATEST_RELEASE installed successfully!"
 echo ""
 echo "Usage:"
-echo "  rmx /path/to/directory    - Delete all files in directory"
-echo "  rmx version               - Show version"
-echo "  rmx about                 - Show information"
+echo "  rmx -rf /path/to/directory    - Delete directory recursively"
+echo "  rmx version                   - Show version"
+echo "  rmx about                     - Show information"
 echo ""
 echo "⚡ RMX is now ready to use!"

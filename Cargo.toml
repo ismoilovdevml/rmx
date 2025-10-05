@@ -1,6 +1,6 @@
 [package]
 name = "rmx"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Otabek Ismoilov <contact@ismoilovdev.com>"]
 description = "Fast alternative to rm command written in Rust"
