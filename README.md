@@ -58,6 +58,17 @@ cargo build --release
 sudo cp target/release/rmx /usr/local/bin/
 ```
 
+### Uninstall
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ismoilovdevml/rmx/main/uninstall.sh | bash
+```
+
+Or manually:
+```bash
+sudo rm /usr/local/bin/rmx
+```
+
 ## 🎯 Usage
 
 ### Basic usage
