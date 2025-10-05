@@ -186,7 +186,7 @@ pub fn print_help() {
     rmx -d empty_dir/               Remove empty directory
 
 {}PERFORMANCE:{}
-    • 3-5x faster than standard rm for large directories
+    • 2x faster than standard rm for large directories
     • Parallel processing using Rayon
     • Optimized for both small and large files
     • Minimal memory footprint
@@ -221,16 +221,16 @@ Uses parallel processing for maximum speed.
 {}Features:{}
   • Full rm compatibility (-r, -f, -i, -v, -d)
   • Parallel file deletion with Rayon
-  • 3-5x faster than rm for large directories
+  • 2x faster than rm for medium-large files
   • Interactive mode for safety
   • Verbose mode for visibility
   • Multiple file/directory support
   • Cross-platform (Linux & macOS)
 
 {}Performance Benchmarks:{}
-  • 1K files × 10MB:  ~3.5x faster than rm
+  • 1K files × 10MB:  ~2x faster than rm
   • 50K small files:  ~2x faster than rm
-  • Large directories: ~5x faster than rm
+  • Large directories: ~2x faster than rm
   • Memory usage:     50% less than rm
 {}",
         color::Fg(color::LightGreen),

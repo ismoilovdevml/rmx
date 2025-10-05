@@ -135,7 +135,7 @@ fn remove_dir_recursive_fast(
 
     // Adaptive parallelism threshold based on benchmarking
     // For macOS APFS: parallel is beneficial at 1000+ files
-    const PARALLEL_THRESHOLD: usize = 1000;
+    const PARALLEL_THRESHOLD: usize = 2000;
 
     if entries.len() >= PARALLEL_THRESHOLD {
         // Use parallel processing for large directories
