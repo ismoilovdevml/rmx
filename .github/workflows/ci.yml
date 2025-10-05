@@ -27,24 +27,7 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
-
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache cargo index
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache target directory
-      uses: actions/cache@v4
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+        cache: true
 
     - name: Check formatting
       run: cargo fmt -- --check
@@ -98,6 +81,7 @@ jobs:
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         toolchain: stable
+        cache: true
 
     - name: Build release
       run: cargo build --release
@@ -132,8 +116,3 @@ jobs:
       run: |
         bash -n install.sh
         echo "✅ Install script syntax is valid"
-
-    - name: Test benchmark script syntax
-      run: |
-        bash -n benchmark.sh
-        echo "✅ Benchmark script syntax is valid"

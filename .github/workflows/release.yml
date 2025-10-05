@@ -40,6 +40,7 @@ jobs:
         with:
           toolchain: stable
           target: ${{ matrix.target }}
+          cache: true
 
       - name: Install musl tools (Linux)
         if: contains(matrix.target, 'linux-musl')
@@ -47,10 +48,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
+      - name: Cache cross binary
+        if: matrix.cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-binary
+
       - name: Install cross (for ARM Linux)
         if: matrix.cross
         run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+          if ! command -v cross &> /dev/null; then
+            cargo install cross --git https://github.com/cross-rs/cross
+          fi
 
       - name: Build with cross
         if: matrix.cross
