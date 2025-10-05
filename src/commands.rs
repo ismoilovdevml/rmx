@@ -153,12 +153,17 @@ fn print_summary(stats: &DeleteStats, elapsed_time: std::time::Duration, verbose
 }
 
 pub fn print_version() {
-    println!("{}rmx v0.5.0{}", color::Fg(color::LightGreen), style::Reset);
+    println!(
+        "{}rmx v{}{}",
+        color::Fg(color::LightGreen),
+        env!("CARGO_PKG_VERSION"),
+        style::Reset
+    );
 }
 
 pub fn print_help() {
     println!(
-        "{}rmx v0.5.0{} - Blazing fast alternative to rm command
+        "{}rmx v{}{} - Blazing fast alternative to rm command
 
 {}USAGE:{}
     rmx [OPTIONS] <FILE|DIRECTORY>...
@@ -173,8 +178,11 @@ pub fn print_help() {
     --version               Show version
     --help                  Show this help message
 
+{}COMMANDS:{}
     about                   Show program information
     dev                     Show developer information
+    upgrade                 Upgrade to the latest version
+    check-update            Check if a new version is available
 
 {}EXAMPLES:{}
     rmx file.txt                    Remove a single file
@@ -184,6 +192,7 @@ pub fn print_help() {
     rmx -i file.txt                 Interactive removal
     rmx -v -r build/                Verbose recursive removal
     rmx -d empty_dir/               Remove empty directory
+    rmx upgrade                     Upgrade to latest version
 
 {}PERFORMANCE:{}
     • 2x faster than standard rm for large directories
@@ -196,6 +205,9 @@ pub fn print_help() {
     Always double-check the path before running.
 {}",
         color::Fg(color::LightGreen),
+        env!("CARGO_PKG_VERSION"),
+        style::Reset,
+        color::Fg(color::LightCyan),
         style::Reset,
         color::Fg(color::LightCyan),
         style::Reset,
@@ -248,12 +260,11 @@ pub fn print_dev() {
         "{}Developer Information{}
 
 {}Author:{}       Otabek Ismoilov
-{}Email:{}        contact@ismoilovdev.com
+{}Email:{}        ismoilovdev@gmail.com
 {}GitHub:{}       @ismoilovdevml
-{}Website:{}      https://ismoilovdev.com
 {}Repository:{}   https://github.com/ismoilovdevml/rmx
 {}License:{}      MIT
-{}Version:{}      v0.5.0
+{}Version:{}      v{}
 {}",
         color::Fg(color::LightGreen),
         style::Reset,
@@ -269,8 +280,7 @@ pub fn print_dev() {
         style::Reset,
         color::Fg(color::LightCyan),
         style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
+        env!("CARGO_PKG_VERSION"),
         style::Reset
     );
 }

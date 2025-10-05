@@ -1,5 +1,6 @@
 mod args;
 mod commands;
+mod upgrade;
 mod util;
 
 fn main() {
@@ -28,6 +29,26 @@ fn main() {
             }
             "dev" => {
                 commands::print_dev();
+                return;
+            }
+            "upgrade" => {
+                if let Err(e) = upgrade::upgrade() {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+                return;
+            }
+            "check-update" => {
+                match upgrade::check_for_updates() {
+                    Ok(Some(_)) => {
+                        println!("Run 'rmx upgrade' to update");
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
                 return;
             }
             _ => {}
