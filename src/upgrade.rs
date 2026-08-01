@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use std::env;
 use std::fs;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
+use std::path::Path;
 use termion::{color, style};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -77,6 +78,76 @@ pub fn check_for_updates() -> Result<Option<String>, String> {
         );
         Ok(None)
     }
+}
+
+/// Swap the freshly downloaded binary in for the running one.
+///
+/// The download lives under the temp dir, which is very often a *different*
+/// filesystem from the install prefix — `/tmp` is tmpfs on most Linux distros —
+/// so renaming straight across it fails with `EXDEV`. Copy into the target's own
+/// directory first and rename within that filesystem: the rename is then atomic,
+/// so a failure can never leave a half-written binary in place, and replacing a
+/// running executable this way is fine on Unix (the old inode stays alive for
+/// the running process).
+fn install_binary(new_binary: &Path, current_exe: &Path) -> Result<(), String> {
+    let dir = current_exe.parent().ok_or_else(|| {
+        format!(
+            "Cannot determine install directory for {}",
+            current_exe.display()
+        )
+    })?;
+    let staging = dir.join(".rmx-upgrade.tmp");
+
+    if let Err(e) = fs::copy(new_binary, &staging) {
+        if e.kind() == ErrorKind::PermissionDenied {
+            return Err(permission_denied(new_binary, current_exe));
+        }
+        return Err(format!(
+            "Failed to stage new binary in {}: {}",
+            dir.display(),
+            e
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = fs::set_permissions(&staging, fs::Permissions::from_mode(0o755)) {
+            let _ = fs::remove_file(&staging);
+            return Err(format!("Failed to set permissions: {}", e));
+        }
+    }
+
+    if let Err(e) = fs::rename(&staging, current_exe) {
+        let _ = fs::remove_file(&staging);
+        if e.kind() == ErrorKind::PermissionDenied {
+            return Err(permission_denied(new_binary, current_exe));
+        }
+        return Err(format!("Failed to install: {}", e));
+    }
+
+    Ok(())
+}
+
+/// Print manual-install instructions and return the error to bail out with.
+fn permission_denied(new_binary: &Path, current_exe: &Path) -> String {
+    println!(
+        "{}Permission denied. Please run:{}",
+        color::Fg(color::LightYellow),
+        style::Reset
+    );
+    println!(
+        "  sudo install -m 755 {} {}",
+        new_binary.display(),
+        current_exe.display()
+    );
+    println!(
+        "\n{}Or run the upgrade with sudo:{}",
+        color::Fg(color::LightYellow),
+        style::Reset
+    );
+    println!("  sudo rmx upgrade");
+    "Permission denied. See instructions above.".to_string()
 }
 
 /// Download and install the latest version
@@ -176,23 +247,13 @@ pub fn upgrade() -> Result<(), String> {
         return Err("Failed to extract tarball".to_string());
     }
 
-    // Get current binary path
+    // Get current binary path. Resolve symlinks so we replace the real file
+    // rather than turning a symlink into a regular binary.
     let current_exe =
         env::current_exe().map_err(|e| format!("Failed to get current path: {}", e))?;
+    let current_exe = fs::canonicalize(&current_exe).unwrap_or(current_exe);
 
     let new_binary = temp_dir.join("rmx");
-
-    // Make the new binary executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&new_binary)
-            .map_err(|e| format!("Failed to get binary metadata: {}", e))?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&new_binary, perms)
-            .map_err(|e| format!("Failed to set permissions: {}", e))?;
-    }
 
     println!(
         "{}Installing...{}",
@@ -200,39 +261,14 @@ pub fn upgrade() -> Result<(), String> {
         style::Reset
     );
 
-    // Replace the current binary
-    // Try to move first, if permission denied, suggest using sudo
-    match fs::rename(&new_binary, &current_exe) {
-        Ok(_) => {
-            println!(
-                "{}✓ Successfully upgraded to v{}!{}",
-                color::Fg(color::LightGreen),
-                latest_version,
-                style::Reset
-            );
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-            // Save the path for manual installation
-            println!(
-                "{}Permission denied. Please run:{}",
-                color::Fg(color::LightYellow),
-                style::Reset
-            );
-            println!(
-                "  sudo mv {} {}",
-                new_binary.display(),
-                current_exe.display()
-            );
-            println!(
-                "\n{}Or run the upgrade with sudo:{}",
-                color::Fg(color::LightYellow),
-                style::Reset
-            );
-            println!("  sudo rmx upgrade");
-            return Err("Permission denied. See instructions above.".to_string());
-        }
-        Err(e) => return Err(format!("Failed to install: {}", e)),
-    }
+    install_binary(&new_binary, &current_exe)?;
+
+    println!(
+        "{}✓ Successfully upgraded to v{}!{}",
+        color::Fg(color::LightGreen),
+        latest_version,
+        style::Reset
+    );
 
     // Cleanup
     let _ = fs::remove_dir_all(&temp_dir);
@@ -244,4 +280,86 @@ pub fn upgrade() -> Result<(), String> {
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let p = env::temp_dir().join(format!(
+            "rmx-upgrade-test-{}-{}-{}",
+            tag,
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&p);
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    /// The download and the install prefix live in separate directories, which
+    /// is the situation that used to hit EXDEV. Staging inside the target's own
+    /// directory means the rename never crosses a filesystem.
+    #[test]
+    fn installs_from_a_separate_directory() {
+        let root = scratch("swap");
+        let download_dir = root.join("download");
+        let install_dir = root.join("bin");
+        fs::create_dir_all(&download_dir).unwrap();
+        fs::create_dir_all(&install_dir).unwrap();
+
+        let new_binary = download_dir.join("rmx");
+        fs::write(&new_binary, b"NEW BINARY").unwrap();
+
+        let current_exe = install_dir.join("rmx");
+        fs::write(&current_exe, b"OLD BINARY").unwrap();
+
+        install_binary(&new_binary, &current_exe).unwrap();
+
+        assert_eq!(fs::read(&current_exe).unwrap(), b"NEW BINARY");
+        // No staging file left behind.
+        assert!(!install_dir.join(".rmx-upgrade.tmp").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installed_binary_is_executable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = scratch("mode");
+        let new_binary = root.join("downloaded");
+        fs::write(&new_binary, b"#!/bin/sh\n").unwrap();
+        // Arrive non-executable, as a fresh copy would.
+        fs::set_permissions(&new_binary, fs::Permissions::from_mode(0o644)).unwrap();
+
+        let current_exe = root.join("installed");
+        fs::write(&current_exe, b"old").unwrap();
+
+        install_binary(&new_binary, &current_exe).unwrap();
+
+        let mode = fs::metadata(&current_exe).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o755, "expected 0755, got {:o}", mode & 0o777);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn missing_download_leaves_the_existing_binary_alone() {
+        let root = scratch("missing");
+        let current_exe = root.join("rmx");
+        fs::write(&current_exe, b"OLD BINARY").unwrap();
+
+        let err = install_binary(&root.join("does-not-exist"), &current_exe).unwrap_err();
+
+        assert!(err.contains("Failed to stage"), "unexpected error: {err}");
+        assert_eq!(fs::read(&current_exe).unwrap(), b"OLD BINARY");
+        assert!(!root.join(".rmx-upgrade.tmp").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }
