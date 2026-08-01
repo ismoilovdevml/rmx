@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="356" viewBox="0 0 780 356" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="780" height="356" rx="10" fill="#181825"/>
+<path d="M0 10a10 10 0 0 1 10-10h760a10 10 0 0 1 10 10v24H0z" fill="#11111b"/>
+<text x="24" y="22" fill="#c3c2b7" font-size="12" font-weight="600">rm vs rmx — wall clock, lower is better</text>
+<text x="756" y="22" fill="#6c7086" font-size="11" text-anchor="end">macOS · Apple Silicon · APFS · best of 5</text>
+<rect x="24" y="48" width="10" height="10" rx="2.5" fill="#d95926"/>
+<text x="40" y="57" fill="#c3c2b7">rm</text>
+<rect x="66" y="48" width="10" height="10" rx="2.5" fill="#3987e5"/>
+<text x="82" y="57" fill="#c3c2b7">rmx</text>
+<text x="24" y="94" fill="#ffffff" font-size="12.5">50,000 small files</text>
+<text x="24" y="111" fill="#6c7086" font-size="11">2.24× faster</text>
+<path d="M220.0 78.0h424.0a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#d95926"/>
+<text x="658" y="89" fill="#c3c2b7" font-size="11.5">3.77 s</text>
+<path d="M220.0 96.0h186.7a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#3987e5"/>
+<text x="658" y="107" fill="#c3c2b7" font-size="11.5">1.68 s</text>
+<text x="24" y="152" fill="#ffffff" font-size="12.5">200,000 small files</text>
+<text x="24" y="169" fill="#6c7086" font-size="11">1.74× faster</text>
+<path d="M220.0 136.0h424.0a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#d95926"/>
+<text x="658" y="147" fill="#c3c2b7" font-size="11.5">17.26 s</text>
+<path d="M220.0 154.0h242.5a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#3987e5"/>
+<text x="658" y="165" fill="#c3c2b7" font-size="11.5">9.94 s</text>
+<text x="24" y="210" fill="#ffffff" font-size="12.5">20,000 files / 500 dirs</text>
+<text x="24" y="227" fill="#6c7086" font-size="11">1.56× faster</text>
+<path d="M220.0 194.0h424.0a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#d95926"/>
+<text x="658" y="205" fill="#c3c2b7" font-size="11.5">1.12 s</text>
+<path d="M220.0 212.0h271.1a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#3987e5"/>
+<text x="658" y="223" fill="#c3c2b7" font-size="11.5">720 ms</text>
+<text x="24" y="268" fill="#ffffff" font-size="12.5">200 × 5 MB files</text>
+<text x="24" y="285" fill="#6c7086" font-size="11">1.05× faster</text>
+<path d="M220.0 252.0h424.0a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#d95926"/>
+<text x="658" y="263" fill="#c3c2b7" font-size="11.5">42 ms</text>
+<path d="M220.0 270.0h403.6a4.0 4.0 0 0 1 4.0 4.0v6.0a4.0 4.0 0 0 1 -4.0 4.0H220.0z" fill="#3987e5"/>
+<text x="658" y="281" fill="#c3c2b7" font-size="11.5">40 ms</text>
+<text x="24" y="316" fill="#6c7086" font-size="11">Bars are scaled per row against rm; absolute times are labelled. Speedups are filesystem-bound.</text>
+</svg>
