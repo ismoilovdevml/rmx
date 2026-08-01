@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
 
@@ -6,34 +7,46 @@ use termion::{color, style};
 use crate::args::RmxArgs;
 use crate::util::bytes_to_readable;
 use rmx_lib::{
-    remove_directory_interactive, remove_directory_recursive, remove_empty_directory, remove_file,
-    remove_file_interactive, DeleteStats,
+    remove_directory_interactive_with, remove_directory_recursive_with, remove_empty_directory,
+    remove_file, remove_file_interactive, DeleteStats, Options,
 };
 
 pub fn execute_removal(args: &RmxArgs) {
     let start_time = Instant::now();
     let mut total_stats = DeleteStats::new();
 
+    // In quiet mode we skip the byte totals, which saves a stat() per file.
+    let opts = Options {
+        verbose: args.verbose,
+        force: args.force,
+        track_size: !args.quiet,
+    };
+
     for path_str in &args.paths {
         let path = Path::new(path_str);
 
-        // Check if path exists
-        if !path.exists() {
-            if !args.force {
-                eprintln!(
-                    "{}rmx: cannot remove '{}': No such file or directory{}",
-                    color::Fg(color::LightRed),
-                    path_str,
-                    style::Reset
-                );
-                std::process::exit(1);
+        // One symlink_metadata answers both "does it exist" and "is it a
+        // directory". Using is_dir() here would follow symlinks and recurse
+        // into the link's target, which is not what rm does.
+        let is_dir = match std::fs::symlink_metadata(path) {
+            Ok(metadata) => metadata.is_dir(),
+            Err(_) => {
+                if !args.force {
+                    eprintln!(
+                        "{}rmx: cannot remove '{}': No such file or directory{}",
+                        color::Fg(color::LightRed),
+                        path_str,
+                        style::Reset
+                    );
+                    std::process::exit(1);
+                }
+                continue;
             }
-            continue;
-        }
+        };
 
         // Handle based on file type and flags
-        let result = if path.is_dir() {
-            handle_directory(path, args)
+        let result = if is_dir {
+            handle_directory(path, args, &opts)
         } else {
             handle_file(path, args)
         };
@@ -51,8 +64,9 @@ pub fn execute_removal(args: &RmxArgs) {
 
     let elapsed_time = start_time.elapsed();
 
-    // Print summary
-    print_summary(&total_stats, elapsed_time, args.verbose);
+    if !args.quiet {
+        print_summary(&total_stats, elapsed_time);
+    }
 }
 
 fn handle_file(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> {
@@ -63,13 +77,13 @@ fn handle_file(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> {
     }
 }
 
-fn handle_directory(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> {
+fn handle_directory(path: &Path, args: &RmxArgs, opts: &Options) -> Result<DeleteStats, String> {
     if args.recursive {
         // Recursive deletion
         if args.interactive {
-            remove_directory_interactive(path, args.verbose, args.force)
+            remove_directory_interactive_with(path, opts)
         } else {
-            let mut stats = remove_directory_recursive(path, args.verbose, args.force)?;
+            let mut stats = remove_directory_recursive_with(path, opts)?;
             // Remove the directory itself
             match std::fs::remove_dir(path) {
                 Ok(_) => {
@@ -103,53 +117,27 @@ fn handle_directory(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> 
     }
 }
 
-fn print_summary(stats: &DeleteStats, elapsed_time: std::time::Duration, verbose: bool) {
-    // Always show summary if files were deleted (unless quiet mode is active in future)
-    if stats.files_deleted > 0 || stats.dirs_deleted > 0 {
-        if !verbose {
-            // Compact summary for non-verbose mode
-            println!(
-                "{}✓ Deleted: {} files, {} directories{}",
-                color::Fg(color::LightGreen),
-                stats.files_deleted,
-                stats.dirs_deleted,
-                style::Reset
-            );
-            println!(
-                "{}✓ Total size: {}{}",
-                color::Fg(color::LightGreen),
-                bytes_to_readable(stats.total_size),
-                style::Reset
-            );
-            println!(
-                "{}✓ Time taken: {:.2?}{}",
-                color::Fg(color::LightGreen),
-                elapsed_time,
-                style::Reset
-            );
-        } else {
-            // Verbose mode shows individual file deletions + summary
-            println!(
-                "{}✓ Deleted: {} files, {} directories{}",
-                color::Fg(color::LightGreen),
-                stats.files_deleted,
-                stats.dirs_deleted,
-                style::Reset
-            );
-            println!(
-                "{}✓ Total size: {}{}",
-                color::Fg(color::LightGreen),
-                bytes_to_readable(stats.total_size),
-                style::Reset
-            );
-            println!(
-                "{}✓ Time taken: {:.2?}{}",
-                color::Fg(color::LightGreen),
-                elapsed_time,
-                style::Reset
-            );
-        }
+fn print_summary(stats: &DeleteStats, elapsed_time: std::time::Duration) {
+    if stats.files_deleted == 0 && stats.dirs_deleted == 0 {
+        return;
     }
+
+    let green = color::Fg(color::LightGreen);
+    let reset = style::Reset;
+
+    // One locked write instead of three separate println! calls.
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    let _ = write!(
+        out,
+        "{green}✓ Deleted: {} files, {} directories{reset}\n\
+         {green}✓ Total size: {}{reset}\n\
+         {green}✓ Time taken: {:.2?}{reset}\n",
+        stats.files_deleted,
+        stats.dirs_deleted,
+        bytes_to_readable(stats.total_size),
+        elapsed_time,
+    );
 }
 
 pub fn print_version() {
@@ -174,6 +162,7 @@ pub fn print_help() {
     -i, --interactive       Prompt before every removal
     -v, --verbose           Explain what is being done
     -d, --dir               Remove empty directories
+    -q, --quiet             Suppress the summary and skip byte accounting
 
     --version               Show version
     --help                  Show this help message

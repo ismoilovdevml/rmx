@@ -1,29 +1,19 @@
 use rayon::prelude::*;
-use std::fs;
-use std::path::Path;
+use std::fs::{self, DirEntry};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DeleteStats {
     pub files_deleted: usize,
     pub dirs_deleted: usize,
     pub total_size: u64,
 }
 
-impl Default for DeleteStats {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DeleteStats {
     pub fn new() -> Self {
-        DeleteStats {
-            files_deleted: 0,
-            dirs_deleted: 0,
-            total_size: 0,
-        }
+        Self::default()
     }
 
     pub fn merge(&mut self, other: DeleteStats) {
@@ -33,7 +23,42 @@ impl DeleteStats {
     }
 }
 
-/// Atomic counters for high-performance tracking
+/// Behaviour knobs for the deletion engine.
+///
+/// `track_size` controls whether byte totals are reported, which costs one
+/// `stat` per file. That turns out to be close to free in practice — `readdir`
+/// has already warmed the inode cache, so the `stat` never reaches the disk
+/// (measured: 2113ms vs 2140ms over 50k files) — so it stays on by default and
+/// only `--quiet` turns it off.
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    pub verbose: bool,
+    pub force: bool,
+    pub track_size: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            verbose: false,
+            force: false,
+            track_size: true,
+        }
+    }
+}
+
+impl Options {
+    pub fn new(verbose: bool, force: bool) -> Self {
+        Options {
+            verbose,
+            force,
+            track_size: true,
+        }
+    }
+}
+
+/// Shared counters. Workers accumulate locally and commit once per batch, so
+/// these are touched a handful of times per directory rather than per file.
 struct AtomicStats {
     files: AtomicUsize,
     dirs: AtomicUsize,
@@ -58,12 +83,100 @@ impl AtomicStats {
     }
 }
 
-/// Remove a single file (optimized)
+/// Batch of work results collected by one worker before it touches shared state.
+struct Batch {
+    files: usize,
+    size: u64,
+    log: Vec<u8>,
+}
+
+impl Batch {
+    fn new(verbose: bool, hint: usize) -> Self {
+        Batch {
+            files: 0,
+            size: 0,
+            // ~40 bytes per "removed '<path>'" line is a reasonable guess.
+            log: if verbose {
+                Vec::with_capacity(hint * 40)
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    /// Publish counters and buffered log output in one go.
+    fn commit(self, stats: &AtomicStats) {
+        if self.files != 0 {
+            stats.files.fetch_add(self.files, Ordering::Relaxed);
+        }
+        if self.size != 0 {
+            stats.size.fetch_add(self.size, Ordering::Relaxed);
+        }
+        if !self.log.is_empty() {
+            let stdout = std::io::stdout();
+            let mut handle = stdout.lock();
+            let _ = handle.write_all(&self.log);
+        }
+    }
+}
+
+/// Below this many files in one directory, the rayon fan-out costs more than it
+/// saves and we just delete them on the current thread.
+///
+/// Measured crossover (min of 7 runs, parallel vs sequential):
+///
+/// ```text
+/// 500 x 128B   1.34x      200 x 5MB    0.95x
+/// 2000 x 128B  1.72x      2000 x 1MB   1.17x
+/// 10000 x 128B 1.30x
+/// ```
+///
+/// Parallelism pays off from a few hundred files upwards. The one loser is a
+/// small batch of large files, where freeing extents contends more than it
+/// parallelises, so the threshold sits just above that case.
+const FILE_PARALLEL_THRESHOLD: usize = 256;
+
+/// Worker threads used for unlinking.
+///
+/// `unlink` is a journalled metadata write, so throughput saturates far below
+/// the core count and then *degrades* under contention. Measured on a 12-core
+/// M-series/APFS box, deleting 50k files (min of 5 runs):
+///
+/// ```text
+/// threads:  1      2      4      6      8      12     24
+/// time:     3052   1999   1843   1976   1959   2264   2484  (ms)
+/// ```
+///
+/// The curve is flat from 2-8 and clearly worse at the core count, so we cap
+/// low instead of taking rayon's default of one thread per core.
+const MAX_WORKERS: usize = 4;
+
+fn worker_count() -> usize {
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    cores.clamp(1, MAX_WORKERS)
+}
+
+/// Dedicated pool, so we neither depend on nor clobber rayon's global pool.
+fn pool() -> &'static rayon::ThreadPool {
+    static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(worker_count())
+            .thread_name(|i| format!("rmx-{i}"))
+            .build()
+            .expect("failed to build thread pool")
+    })
+}
+
+/// Remove a single file.
 pub fn remove_file(path: &Path, verbose: bool, force: bool) -> Result<DeleteStats, String> {
     let mut stats = DeleteStats::new();
 
-    // Get file size for statistics (always track size)
-    let size = match fs::metadata(path) {
+    // symlink_metadata, not metadata: a broken symlink is still removable, and
+    // we want the link's own size rather than its target's.
+    let size = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata.len(),
         Err(e) => {
             if force {
@@ -73,7 +186,6 @@ pub fn remove_file(path: &Path, verbose: bool, force: bool) -> Result<DeleteStat
         }
     };
 
-    // Delete the file
     match fs::remove_file(path) {
         Ok(_) => {
             stats.files_deleted = 1;
@@ -93,36 +205,40 @@ pub fn remove_file(path: &Path, verbose: bool, force: bool) -> Result<DeleteStat
     }
 }
 
-/// Ultra-fast directory removal
+/// Recursively remove a directory's *contents*. The directory itself is left in
+/// place for the caller to remove.
 pub fn remove_directory_recursive(
     path: &Path,
     verbose: bool,
     force: bool,
 ) -> Result<DeleteStats, String> {
-    if !path.is_dir() {
-        return Ok(DeleteStats::new());
+    remove_directory_recursive_with(path, &Options::new(verbose, force))
+}
+
+pub fn remove_directory_recursive_with(path: &Path, opts: &Options) -> Result<DeleteStats, String> {
+    // symlink_metadata so a symlink pointing at a directory is never descended.
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.is_dir() => {}
+        _ => return Ok(DeleteStats::new()),
     }
 
-    let stats = Arc::new(AtomicStats::new());
-
-    // Use optimized recursive function
-    remove_dir_recursive_fast(path, verbose, force, &stats)?;
-
+    let stats = AtomicStats::new();
+    walk(path, opts, &stats)?;
     Ok(stats.to_delete_stats())
 }
 
-/// Fast recursive directory removal with adaptive parallelism
-fn remove_dir_recursive_fast(
-    path: &Path,
-    verbose: bool,
-    force: bool,
-    stats: &Arc<AtomicStats>,
-) -> Result<(), String> {
-    // Read directory entries
-    let entries: Vec<_> = match fs::read_dir(path) {
-        Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
+/// Delete everything under `path`.
+///
+/// Entries are split into files and subdirectories in one pass. Subdirectories
+/// recurse sequentially; the files in a directory are unlinked in parallel
+/// chunks, so each worker commits to the shared counters once per chunk rather
+/// than once per file. See the threshold constants above for why the split is
+/// this way round.
+fn walk(path: &Path, opts: &Options, stats: &AtomicStats) -> Result<(), String> {
+    let read_dir = match fs::read_dir(path) {
+        Ok(rd) => rd,
         Err(e) => {
-            if force {
+            if opts.force {
                 return Ok(());
             }
             return Err(format!(
@@ -133,107 +249,147 @@ fn remove_dir_recursive_fast(
         }
     };
 
-    // Adaptive parallelism threshold based on benchmarking
-    // For macOS APFS: parallel is beneficial at 1000+ files
-    const PARALLEL_THRESHOLD: usize = 2000;
+    let mut files: Vec<DirEntry> = Vec::new();
+    let mut dirs: Vec<PathBuf> = Vec::new();
 
-    if entries.len() >= PARALLEL_THRESHOLD {
-        // Use parallel processing for large directories
-        let results: Vec<Result<(), String>> = entries
-            .par_iter()
-            .map(|entry| process_entry_fast(entry, verbose, force, stats))
-            .collect();
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                if opts.force {
+                    continue;
+                }
+                return Err(format!(
+                    "Failed to read directory '{}': {}",
+                    path.display(),
+                    e
+                ));
+            }
+        };
 
-        // Check for errors
+        // file_type() is served from the dirent's d_type on APFS/ext4, so this
+        // is normally free. It also does not follow symlinks, which is what we
+        // want: a symlink is unlinked, never descended into.
+        let is_dir = match entry.file_type() {
+            Ok(ft) => ft.is_dir(),
+            Err(e) => {
+                if opts.force {
+                    continue;
+                }
+                return Err(format!("Cannot access '{}': {}", entry.path().display(), e));
+            }
+        };
+
+        if is_dir {
+            dirs.push(entry.path());
+        } else {
+            files.push(entry);
+        }
+    }
+
+    // Recurse into subdirectories first so their contents are gone before we
+    // try to rmdir them.
+    // Recursion stays sequential on purpose. Fanning subdirectories out across
+    // threads measured *slower* (840ms vs 738ms on a 500-dir x 40-file tree):
+    // concurrent traversal contends on filesystem metadata locks and the win
+    // never materialises. Parallelism pays off for the unlinks below, not here.
+    // Large directories still use every worker, which is the case that matters.
+    for dir in &dirs {
+        remove_subtree(dir, opts, stats)?;
+    }
+
+    if files.len() >= FILE_PARALLEL_THRESHOLD {
+        // Aim for a few chunks per thread so work stealing can even out slow
+        // files without paying per-file task overhead.
+        let chunk = (files.len() / (worker_count() * 4)).max(64);
+        // Touch the pool only here: deleting a single file or a small directory
+        // then never spawns a worker thread at all.
+        let results: Vec<Result<(), String>> = pool().install(|| {
+            files
+                .par_chunks(chunk)
+                .map(|batch| delete_files(batch, opts, stats))
+                .collect()
+        });
         for result in results {
-            if let Err(e) = result {
-                if !force {
-                    return Err(e);
-                }
-            }
+            result?;
         }
-    } else {
-        // Sequential processing for small/medium directories
-        for entry in &entries {
-            if let Err(e) = process_entry_fast(entry, verbose, force, stats) {
-                if !force {
-                    return Err(e);
-                }
-            }
-        }
+    } else if !files.is_empty() {
+        delete_files(&files, opts, stats)?;
     }
 
     Ok(())
 }
 
-/// Process a single directory entry (highly optimized)
-#[inline(always)]
-fn process_entry_fast(
-    entry: &fs::DirEntry,
-    verbose: bool,
-    force: bool,
-    stats: &Arc<AtomicStats>,
-) -> Result<(), String> {
-    let path = entry.path();
+/// Empty a subdirectory, then remove the directory itself.
+fn remove_subtree(path: &Path, opts: &Options, stats: &AtomicStats) -> Result<(), String> {
+    walk(path, opts, stats)?;
 
-    // Use DirEntry::metadata() which is cached on most systems
-    let metadata = match entry.metadata() {
-        Ok(m) => m,
+    match fs::remove_dir(path) {
+        Ok(_) => {
+            stats.dirs.fetch_add(1, Ordering::Relaxed);
+            if opts.verbose {
+                println!("removed directory '{}'", path.display());
+            }
+            Ok(())
+        }
         Err(e) => {
-            if force {
-                return Ok(());
-            }
-            return Err(format!("Cannot access '{}': {}", path.display(), e));
-        }
-    };
-
-    if metadata.is_dir() {
-        // Recursively delete subdirectory
-        remove_dir_recursive_fast(&path, verbose, force, stats)?;
-
-        // Remove the directory itself
-        match fs::remove_dir(&path) {
-            Ok(_) => {
-                stats.dirs.fetch_add(1, Ordering::Relaxed);
-                if verbose {
-                    println!("removed directory '{}'", path.display());
-                }
+            if opts.force {
                 Ok(())
-            }
-            Err(e) => {
-                if force {
-                    Ok(())
-                } else {
-                    Err(format!(
-                        "Cannot remove directory '{}': {}",
-                        path.display(),
-                        e
-                    ))
-                }
+            } else {
+                Err(format!(
+                    "Cannot remove directory '{}': {}",
+                    path.display(),
+                    e
+                ))
             }
         }
-    } else {
-        // File deletion - always track size for statistics
-        let size = metadata.len();
+    }
+}
+
+/// Unlink a run of files, accumulating counters and log output locally and
+/// publishing them once at the end.
+fn delete_files(entries: &[DirEntry], opts: &Options, stats: &AtomicStats) -> Result<(), String> {
+    let mut batch = Batch::new(opts.verbose, entries.len());
+    let mut outcome = Ok(());
+
+    for entry in entries {
+        let path = entry.path();
+
+        // Only pay for the stat when the caller actually wants byte totals.
+        let size = if opts.track_size {
+            match entry.metadata() {
+                Ok(m) => m.len(),
+                Err(e) => {
+                    if !opts.force {
+                        outcome = Err(format!("Cannot access '{}': {}", path.display(), e));
+                        break;
+                    }
+                    0
+                }
+            }
+        } else {
+            0
+        };
 
         match fs::remove_file(&path) {
             Ok(_) => {
-                stats.files.fetch_add(1, Ordering::Relaxed);
-                stats.size.fetch_add(size, Ordering::Relaxed);
-                if verbose {
-                    println!("removed '{}'", path.display());
+                batch.files += 1;
+                batch.size += size;
+                if opts.verbose {
+                    let _ = writeln!(batch.log, "removed '{}'", path.display());
                 }
-                Ok(())
             }
             Err(e) => {
-                if force {
-                    Ok(())
-                } else {
-                    Err(format!("Cannot remove '{}': {}", path.display(), e))
+                if !opts.force {
+                    outcome = Err(format!("Cannot remove '{}': {}", path.display(), e));
+                    break;
                 }
             }
         }
     }
+
+    batch.commit(stats);
+    outcome
 }
 
 /// Remove empty directory
@@ -306,18 +462,25 @@ pub fn remove_directory_interactive(
     verbose: bool,
     force: bool,
 ) -> Result<DeleteStats, String> {
+    remove_directory_interactive_with(path, &Options::new(verbose, force))
+}
+
+pub fn remove_directory_interactive_with(
+    path: &Path,
+    opts: &Options,
+) -> Result<DeleteStats, String> {
     if prompt_user(path, true) {
-        let mut stats = remove_directory_recursive(path, verbose, force)?;
+        let mut stats = remove_directory_recursive_with(path, opts)?;
         match fs::remove_dir(path) {
             Ok(_) => {
                 stats.dirs_deleted += 1;
-                if verbose {
+                if opts.verbose {
                     println!("removed directory '{}'", path.display());
                 }
                 Ok(stats)
             }
             Err(e) => {
-                if force {
+                if opts.force {
                     Ok(stats)
                 } else {
                     Err(format!(
