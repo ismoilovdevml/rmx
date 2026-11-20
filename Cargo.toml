@@ -2,6 +2,7 @@
 name = "rmx"
 version = "0.7.0"
 edition = "2021"
+rust-version = "1.88"
 authors = ["Otabek Ismoilov <ismoilovdev@gmail.com>"]
 description = "Fast alternative to rm command written in Rust"
 license = "MIT"
