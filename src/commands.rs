@@ -1,120 +1,144 @@
-use std::io::Write;
-use std::path::Path;
+use std::fs;
+use std::io::{BufRead, Write};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use termion::{color, style};
-
 use crate::args::RmxArgs;
+use crate::style::{self, Stream};
 use crate::util::bytes_to_readable;
-use rmx_lib::{
-    remove_directory_interactive_with, remove_directory_recursive_with, remove_empty_directory,
-    remove_file, remove_file_interactive, DeleteStats, Options,
-};
+use rmx_lib::{remove_all, remove_all_interactive, DeleteStats, Options};
 
-pub fn execute_removal(args: &RmxArgs) {
+fn report_error(msg: &str) {
+    eprintln!(
+        "{}",
+        style::paint(Stream::Stderr, style::RED, &format!("rmx: {msg}"))
+    );
+}
+
+/// Run a removal and return the process exit code (0 = everything removed).
+pub fn execute_removal(args: &RmxArgs) -> i32 {
     let start_time = Instant::now();
-    let mut total_stats = DeleteStats::new();
+    let mut failed = false;
 
-    // In quiet mode we skip the byte totals, which saves a stat() per file.
+    let mut paths = Vec::with_capacity(args.paths.len());
+    for path in &args.paths {
+        match check_operand(path, args) {
+            Ok(p) => paths.push(p),
+            Err(msg) => {
+                report_error(&msg);
+                failed = true;
+            }
+        }
+    }
+
     let opts = Options {
-        verbose: args.verbose,
+        recursive: args.recursive,
+        dir: args.dir,
         force: args.force,
+        verbose: args.verbose,
         track_size: !args.quiet,
-        ..Options::default()
+        jobs: args.jobs,
     };
 
-    for path_str in &args.paths {
-        let path = Path::new(path_str);
+    let outcome = if paths.is_empty() {
+        Default::default()
+    } else if args.interactive {
+        remove_all_interactive(&paths, &opts, &mut ask)
+    } else {
+        remove_all(&paths, &opts)
+    };
 
-        // One symlink_metadata answers both "does it exist" and "is it a
-        // directory". Using is_dir() here would follow symlinks and recurse
-        // into the link's target, which is not what rm does.
-        let is_dir = match std::fs::symlink_metadata(path) {
-            Ok(metadata) => metadata.is_dir(),
-            Err(_) => {
-                if !args.force {
-                    eprintln!(
-                        "{}rmx: cannot remove '{}': No such file or directory{}",
-                        color::Fg(color::LightRed),
-                        path_str,
-                        style::Reset
-                    );
-                    std::process::exit(1);
-                }
-                continue;
-            }
-        };
-
-        // Handle based on file type and flags
-        let result = if is_dir {
-            handle_directory(path, args, &opts)
-        } else {
-            handle_file(path, args)
-        };
-
-        match result {
-            Ok(stats) => total_stats.merge(stats),
-            Err(e) => {
-                eprintln!("{}{}{}", color::Fg(color::LightRed), e, style::Reset);
-                if !args.force {
-                    std::process::exit(1);
-                }
-            }
-        }
+    for e in &outcome.errors {
+        report_error(e);
     }
-
-    let elapsed_time = start_time.elapsed();
+    failed |= !outcome.is_ok();
 
     if !args.quiet {
-        print_summary(&total_stats, elapsed_time);
+        print_summary(&outcome.stats, start_time.elapsed());
     }
+
+    i32::from(failed)
 }
 
-fn handle_file(path: &Path, args: &RmxArgs) -> Result<DeleteStats, String> {
-    if args.interactive {
-        remove_file_interactive(path, args.verbose, args.force)
-    } else {
-        remove_file(path, args.verbose, args.force)
-    }
-}
+/// Safety checks every operand must pass before the engine sees it.
+///
+/// Returns the path to hand to the engine (trailing slashes stripped).
+fn check_operand(path: &Path, args: &RmxArgs) -> Result<PathBuf, String> {
+    let shown = path.display();
+    let bytes = path.as_os_str().as_bytes();
 
-fn handle_directory(path: &Path, args: &RmxArgs, opts: &Options) -> Result<DeleteStats, String> {
-    if args.recursive {
-        // Recursive deletion
-        if args.interactive {
-            remove_directory_interactive_with(path, opts)
-        } else {
-            let mut stats = remove_directory_recursive_with(path, opts)?;
-            // Remove the directory itself
-            match std::fs::remove_dir(path) {
-                Ok(_) => {
-                    stats.dirs_deleted += 1;
-                    if args.verbose {
-                        println!("removed directory '{}'", path.display());
-                    }
-                    Ok(stats)
-                }
-                Err(e) => {
-                    if args.force {
-                        Ok(stats)
-                    } else {
-                        Err(format!(
-                            "Cannot remove directory '{}': {}",
-                            path.display(),
-                            e
-                        ))
-                    }
-                }
+    // Strip trailing slashes, but keep a bare "/" (or "//") as "/".
+    let mut end = bytes.len();
+    while end > 1 && bytes[end - 1] == b'/' {
+        end -= 1;
+    }
+    let had_trailing_slash = end < bytes.len();
+    let stripped = Path::new(std::ffi::OsStr::from_bytes(&bytes[..end]));
+
+    // POSIX: refuse any operand whose last component is "." or "..".
+    let last = match stripped
+        .as_os_str()
+        .as_bytes()
+        .rsplit(|b| *b == b'/')
+        .next()
+    {
+        Some(l) => l,
+        None => b"",
+    };
+    if last == b"." || last == b".." {
+        return Err(format!(
+            "refusing to remove '.' or '..' directory: skipping '{shown}'"
+        ));
+    }
+
+    if args.recursive && args.preserve_root && is_root(stripped) {
+        return Err(format!(
+            "it is dangerous to operate recursively on '{shown}'\n\
+             rmx: use --no-preserve-root to override this failsafe"
+        ));
+    }
+
+    if had_trailing_slash && stripped != Path::new("/") {
+        if let Ok(meta) = fs::symlink_metadata(stripped) {
+            if meta.file_type().is_symlink() {
+                // `link/` would mean "the directory the link points to".
+                // Refuse rather than delete data outside the named path.
+                return Err(format!(
+                    "cannot remove '{shown}': Not a directory \
+                     (it is a symlink; drop the trailing '/' to remove the link itself)"
+                ));
+            }
+            if !meta.is_dir() {
+                return Err(format!("cannot remove '{shown}': Not a directory"));
             }
         }
-    } else if args.dir {
-        // Remove empty directory
-        remove_empty_directory(path, args.verbose, args.force)
-    } else {
-        Err(format!(
-            "rmx: cannot remove '{}': Is a directory (use -r to remove directories)",
-            path.display()
-        ))
+    }
+
+    Ok(stripped.to_path_buf())
+}
+
+/// Same directory as `/`? Compared by device and inode without following the
+/// operand if it is a symlink, so `rmx -rf link-to-root` just unlinks the link.
+fn is_root(path: &Path) -> bool {
+    let (Ok(target), Ok(root)) = (fs::symlink_metadata(path), fs::metadata("/")) else {
+        return false;
+    };
+    target.is_dir() && target.dev() == root.dev() && target.ino() == root.ino()
+}
+
+/// Interactive prompt on stderr, answer from stdin.
+fn ask(question: &str) -> bool {
+    eprint!("rmx: {question} ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    match std::io::stdin().lock().read_line(&mut line) {
+        Ok(0) | Err(_) => false,
+        Ok(_) => {
+            let answer = line.trim().to_ascii_lowercase();
+            answer == "y" || answer == "yes"
+        }
     }
 }
 
@@ -123,154 +147,140 @@ fn print_summary(stats: &DeleteStats, elapsed_time: std::time::Duration) {
         return;
     }
 
-    let green = color::Fg(color::LightGreen);
-    let reset = style::Reset;
-
-    // One locked write instead of three separate println! calls.
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    let _ = write!(
-        out,
-        "{green}✓ Deleted: {} files, {} directories{reset}\n\
-         {green}✓ Total size: {}{reset}\n\
-         {green}✓ Time taken: {:.2?}{reset}\n",
+    let lines = format!(
+        "✓ Deleted: {} files, {} directories\n\
+         ✓ Total size: {}\n\
+         ✓ Time taken: {:.2?}",
         stats.files_deleted,
         stats.dirs_deleted,
         bytes_to_readable(stats.total_size),
         elapsed_time,
     );
+    // One locked write instead of three separate println! calls.
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    let _ = writeln!(
+        out,
+        "{}",
+        style::paint(Stream::Stdout, style::GREEN, &lines)
+    );
 }
 
 pub fn print_version() {
     println!(
-        "{}rmx v{}{}",
-        color::Fg(color::LightGreen),
-        env!("CARGO_PKG_VERSION"),
-        style::Reset
+        "{}",
+        style::paint(
+            Stream::Stdout,
+            style::GREEN,
+            &format!("rmx v{}", env!("CARGO_PKG_VERSION"))
+        )
     );
+}
+
+fn heading(text: &str) -> String {
+    style::paint(Stream::Stdout, style::CYAN, text)
 }
 
 pub fn print_help() {
     println!(
-        "{}rmx v{}{} - Blazing fast alternative to rm command
+        "{title} - a faster rm
 
-{}USAGE:{}
-    rmx [OPTIONS] <FILE|DIRECTORY>...
+{usage}
+    rmx [OPTIONS] [--] <FILE|DIRECTORY>...
+    rmx <COMMAND>
 
-{}OPTIONS:{}
+{options}
     -r, -R, --recursive     Remove directories and their contents recursively
     -f, --force             Ignore nonexistent files, never prompt
     -i, --interactive       Prompt before every removal
     -v, --verbose           Explain what is being done
     -d, --dir               Remove empty directories
     -q, --quiet             Suppress the summary and skip byte accounting
+    -j, --jobs <N>          Worker threads for unlinking (default: min(cores, 4))
+        --no-preserve-root  Do not treat '/' specially
+        --preserve-root     Refuse to operate recursively on '/' (default)
+    --                      Treat every following argument as a path
+    -V, --version           Show version
+    -h, --help              Show this help message
 
-    --version               Show version
-    --help                  Show this help message
+    The last of -f / -i wins. -f only ignores missing files; every other
+    error (permission denied, read-only file system, ...) is still reported
+    and makes rmx exit 1.
 
-{}COMMANDS:{}
+{commands}
     about                   Show program information
     dev                     Show developer information
-    upgrade                 Upgrade to the latest version
+    upgrade                 Upgrade to the latest release (SHA-256 verified)
     check-update            Check if a new version is available
+    version, help           Same as --version, --help
 
-{}EXAMPLES:{}
+    Commands are only recognised as the sole argument. To remove a file
+    named like a command, use 'rmx -- version' or 'rmx ./version'.
+
+{examples}
     rmx file.txt                    Remove a single file
-    rmx file1.txt file2.txt         Remove multiple files
-    rmx -r directory/               Remove directory recursively
-    rmx -rf /tmp/test/              Force remove directory
-    rmx -i file.txt                 Interactive removal
-    rmx -v -r build/                Verbose recursive removal
-    rmx -d empty_dir/               Remove empty directory
-    rmx upgrade                     Upgrade to latest version
+    rmx -rf node_modules/           Remove a directory tree
+    rmx -rfv build/                 Show every removal
+    rmx -rfq cache/                 Silent, for scripts
+    rmx -i file.txt                 Ask first
+    rmx -d empty_dir/               Remove a directory only if empty
+    rmx -- -weird-name.txt          Remove a file whose name starts with '-'
 
-{}PERFORMANCE:{}
-    • 2x faster than standard rm for large directories
-    • Parallel processing using Rayon
-    • Optimized for both small and large files
-    • Minimal memory footprint
-
-{}WARNING:{}
-    This tool permanently deletes files. Use with caution!
-    Always double-check the path before running.
-{}",
-        color::Fg(color::LightGreen),
-        env!("CARGO_PKG_VERSION"),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightRed),
-        style::Reset,
-        style::Reset
+{warning}
+    rmx permanently deletes files. There is no trash. Check the path first.",
+        title = style::paint(
+            Stream::Stdout,
+            style::GREEN,
+            &format!("rmx v{}", env!("CARGO_PKG_VERSION"))
+        ),
+        usage = heading("USAGE:"),
+        options = heading("OPTIONS:"),
+        commands = heading("COMMANDS:"),
+        examples = heading("EXAMPLES:"),
+        warning = style::paint(Stream::Stdout, style::RED, "WARNING:"),
     );
 }
 
 pub fn print_about() {
     println!(
-        "{}rmx - Blazing Fast File Deletion Tool{}
+        "{title}
 
-A high-performance alternative to 'rm' written in Rust.
-Uses parallel processing for maximum speed.
+A drop-in for the rm flags you already use (-r -f -i -v -d), written in Rust.
+One thread walks the tree with openat/readdir while a small pool of workers
+unlinks files relative to their directory's file descriptor. Symlinks are
+never followed.
 
-{}Features:{}
-  • Full rm compatibility (-r, -f, -i, -v, -d)
-  • Parallel file deletion with Rayon
-  • 2x faster than rm for medium-large files
-  • Interactive mode for safety
-  • Verbose mode for visibility
-  • Multiple file/directory support
-  • Cross-platform (Linux & macOS)
+{features}
+  • rm-compatible flags, '--', --preserve-root, '.'/'..' refusal
+  • -f ignores only missing files; real errors are reported
+  • Parallel unlinking capped at 4 workers (the measured optimum)
+  • Byte totals with hard links counted once
+  • Verified upgrades: SHA-256 verified against the release's SHA256SUMS
+  • Linux and macOS
 
-{}Performance Benchmarks:{}
-  • 1K files × 10MB:  ~2x faster than rm
-  • 50K small files:  ~2x faster than rm
-  • Large directories: ~2x faster than rm
-  • Memory usage:     50% less than rm
-{}",
-        color::Fg(color::LightGreen),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        style::Reset
+Benchmarks: https://github.com/ismoilovdevml/rmx#performance",
+        title = style::paint(Stream::Stdout, style::GREEN, "rmx - a faster rm"),
+        features = heading("Features:"),
     );
 }
 
 pub fn print_dev() {
     println!(
-        "{}Developer Information{}
+        "{title}
 
-{}Author:{}       Otabek Ismoilov
-{}Email:{}        ismoilovdev@gmail.com
-{}GitHub:{}       @ismoilovdevml
-{}Repository:{}   https://github.com/ismoilovdevml/rmx
-{}License:{}      MIT
-{}Version:{}      v{}
-{}",
-        color::Fg(color::LightGreen),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        color::Fg(color::LightCyan),
-        style::Reset,
-        env!("CARGO_PKG_VERSION"),
-        style::Reset
+{author}       Otabek Ismoilov
+{email}        ismoilovdev@gmail.com
+{github}       @ismoilovdevml
+{repo}   https://github.com/ismoilovdevml/rmx
+{license}      MIT
+{version}      v{v}",
+        title = style::paint(Stream::Stdout, style::GREEN, "Developer Information"),
+        author = heading("Author:"),
+        email = heading("Email:"),
+        github = heading("GitHub:"),
+        repo = heading("Repository:"),
+        license = heading("License:"),
+        version = heading("Version:"),
+        v = env!("CARGO_PKG_VERSION"),
     );
 }

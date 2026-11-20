@@ -1,69 +1,45 @@
 mod args;
-mod style;
 mod commands;
+mod style;
 mod upgrade;
 mod util;
 
+use args::Command;
+
 fn main() {
-    let raw_args = args::parse_args();
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
 
-    // Check for special commands first
-    if raw_args.len() >= 2 {
-        let first_arg = &raw_args[1];
-
-        match first_arg.as_str() {
-            "--version" | "-v" => {
-                commands::print_version();
-                return;
-            }
-            "--help" | "-h" | "help" => {
-                commands::print_help();
-                return;
-            }
-            "version" => {
-                commands::print_version();
-                return;
-            }
-            "about" => {
-                commands::print_about();
-                return;
-            }
-            "dev" => {
-                commands::print_dev();
-                return;
-            }
-            "upgrade" => {
-                if let Err(e) = upgrade::upgrade() {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
-                return;
-            }
-            "check-update" => {
-                match upgrade::check_for_updates() {
-                    Ok(Some(_)) => {
-                        println!("Run 'rmx upgrade' to update");
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-                return;
-            }
-            _ => {}
-        }
-    }
-
-    // Parse flags and paths
-    match args::parse_flags(&raw_args) {
-        Some(parsed_args) => {
-            commands::execute_removal(&parsed_args);
-        }
-        None => {
-            commands::print_help();
+    let command = match args::parse(argv) {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln!(
+                "{}",
+                style::paint(style::Stream::Stderr, style::RED, &format!("rmx: {msg}"))
+            );
+            eprintln!("Try 'rmx --help' for more information.");
             std::process::exit(1);
         }
+    };
+
+    match command {
+        Command::Remove(a) => std::process::exit(commands::execute_removal(&a)),
+        Command::Help => commands::print_help(),
+        Command::Version => commands::print_version(),
+        Command::About => commands::print_about(),
+        Command::Dev => commands::print_dev(),
+        Command::Upgrade => {
+            if let Err(e) = upgrade::upgrade() {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Command::CheckUpdate => match upgrade::check_for_updates() {
+            Ok(Some(_)) => println!("Run 'rmx upgrade' to update"),
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        },
     }
 }
