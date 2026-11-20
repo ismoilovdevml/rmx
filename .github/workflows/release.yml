@@ -13,23 +13,22 @@ jobs:
     name: Build for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # One broken target must not cancel the others.
+      fail-fast: false
       matrix:
         include:
-          # Linux musl builds (static binaries)
+          # Linux musl builds (static binaries). rmx only depends on libc, so
+          # every target builds natively on a matching runner -- no `cross`.
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            cross: false
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
-            cross: true
 
           # macOS builds
           - os: macos-latest
             target: x86_64-apple-darwin
-            cross: false
           - os: macos-latest
             target: aarch64-apple-darwin
-            cross: false
 
     steps:
       - name: Checkout code
@@ -48,29 +47,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Cache cross binary
-        if: matrix.cross
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cross
-          key: ${{ runner.os }}-cross-binary
-
-      - name: Install cross (for ARM Linux)
-        if: matrix.cross
-        run: |
-          if ! command -v cross &> /dev/null; then
-            cargo install cross --git https://github.com/cross-rs/cross
-          fi
-
-      - name: Build with cross
-        if: matrix.cross
-        run: |
-          cross build --release --target ${{ matrix.target }}
-
-      - name: Build native
-        if: ${{ !matrix.cross }}
+      - name: Build
         run: |
           cargo build --release --target ${{ matrix.target }}
+          file target/${{ matrix.target }}/release/rmx || true
 
       # No separate strip step: Cargo.toml sets `strip = true` for release.
 
