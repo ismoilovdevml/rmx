@@ -1,111 +1,153 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Install rmx from GitHub releases.
+#
+#   curl -fsSL https://raw.githubusercontent.com/ismoilovdevml/rmx/main/install.sh | bash
+#
+# Environment:
+#   INSTALL_DIR   install prefix (default: /usr/local/bin)
+#   RMX_VERSION   release tag to install, e.g. v0.8.0 (default: latest)
+#
+# The archive is verified against the release's SHA256SUMS.txt before it is
+# extracted; installation is refused if that file or the archive's entry in it
+# is missing (releases before v0.8.0 do not publish checksums).
 
-set -e
+set -euo pipefail
 
 REPO="ismoilovdevml/rmx"
+REPO_URL="https://github.com/$REPO"
 BINARY_NAME="rmx"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+RMX_VERSION="${RMX_VERSION:-}"
 
-echo "🚀 Installing RMX - Fast alternative to rm command"
-echo ""
+CURL=(curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2
+    --connect-timeout 10 --max-time 120 --retry 2)
 
-detect_os() {
-    case "$(uname -s)" in
-        Linux*)     echo "linux";;
-        Darwin*)    echo "darwin";;
-        *)          echo "unknown";;
-    esac
-}
-
-detect_arch() {
-    case "$(uname -m)" in
-        x86_64|amd64)   echo "x86_64";;
-        aarch64|arm64)  echo "aarch64";;
-        *)              echo "unknown";;
-    esac
-}
-
-OS=$(detect_os)
-ARCH=$(detect_arch)
-
-if [ "$OS" = "unknown" ] || [ "$ARCH" = "unknown" ]; then
-    echo "❌ Unsupported OS or architecture"
-    echo "OS: $OS, Architecture: $ARCH"
+die() {
+    echo "Error: $*" >&2
     exit 1
-fi
+}
 
-echo "✓ Detected: $OS ($ARCH)"
+need() {
+    command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed"
+}
 
-# Determine target triple
+need curl
+need tar
+need install
+need awk
+
+echo "Installing rmx - fast alternative to rm"
+
+case "$(uname -s)" in
+    Linux*)  OS="linux" ;;
+    Darwin*) OS="darwin" ;;
+    *)       die "unsupported OS: $(uname -s)" ;;
+esac
+
+case "$(uname -m)" in
+    x86_64|amd64)  ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="aarch64" ;;
+    *)             die "unsupported architecture: $(uname -m)" ;;
+esac
+
 if [ "$OS" = "linux" ]; then
     TARGET="${ARCH}-unknown-linux-musl"
-elif [ "$OS" = "darwin" ]; then
-    TARGET="${ARCH}-apple-darwin"
 else
-    echo "❌ Unsupported operating system: $OS"
-    exit 1
+    TARGET="${ARCH}-apple-darwin"
+fi
+ASSET="rmx-${TARGET}.tar.gz"
+echo "Target: $TARGET"
+
+if command -v sha256sum >/dev/null 2>&1; then
+    SHA_CHECK=(sha256sum -c)
+elif command -v shasum >/dev/null 2>&1; then
+    SHA_CHECK=(shasum -a 256 -c)
+else
+    die "need 'sha256sum' or 'shasum' to verify the download"
 fi
 
-echo "📦 Target: $TARGET"
-
-# Get latest release version
-echo "🔍 Fetching latest release..."
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
-if [ -z "$LATEST_RELEASE" ]; then
-    echo "❌ Could not fetch latest release"
-    exit 1
+# Resolve the tag from the /releases/latest redirect (no API rate limit).
+if [ -n "$RMX_VERSION" ]; then
+    TAG="$RMX_VERSION"
+    case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
+else
+    echo "Resolving latest release..."
+    EFFECTIVE_URL=$("${CURL[@]}" -o /dev/null -w '%{url_effective}' "$REPO_URL/releases/latest") \
+        || die "could not reach $REPO_URL/releases/latest"
+    TAG="${EFFECTIVE_URL#"$REPO_URL/releases/tag/"}"
+    [ "$TAG" != "$EFFECTIVE_URL" ] || die "unexpected latest-release URL: $EFFECTIVE_URL"
 fi
 
-echo "✓ Latest version: $LATEST_RELEASE"
-
-# Download URL
-DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/rmx-${TARGET}.tar.gz"
-
-echo "📥 Downloading $BINARY_NAME from $DOWNLOAD_URL..."
+# The tag goes into URLs: accept vX.Y.Z only.
+[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid release tag: '$TAG' (expected vX.Y.Z)"
+echo "Version: $TAG"
 
 TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
-# Download binary
-if ! curl -sSL -o "rmx.tar.gz" "$DOWNLOAD_URL"; then
-    echo "❌ Download failed"
-    echo "URL: $DOWNLOAD_URL"
-    exit 1
+DOWNLOAD_BASE="$REPO_URL/releases/download/$TAG"
+
+echo "Downloading SHA256SUMS.txt..."
+if ! "${CURL[@]}" -o "$TEMP_DIR/SHA256SUMS.txt" "$DOWNLOAD_BASE/SHA256SUMS.txt"; then
+    die "SHA256SUMS.txt is not available for $TAG; refusing to install an unverified binary.
+       (Releases before v0.8.0 do not publish checksums.)"
 fi
 
-# Extract binary
-echo "📦 Extracting..."
-tar xzf rmx.tar.gz
+echo "Downloading $ASSET..."
+"${CURL[@]}" -o "$TEMP_DIR/$ASSET" "$DOWNLOAD_BASE/$ASSET" \
+    || die "download failed: $DOWNLOAD_BASE/$ASSET"
 
-if [ ! -f "$BINARY_NAME" ]; then
-    echo "❌ Binary not found in archive"
-    exit 1
+echo "Verifying SHA-256 checksum..."
+awk -v f="$ASSET" '$2 == f || $2 == "*" f' "$TEMP_DIR/SHA256SUMS.txt" > "$TEMP_DIR/asset.sha256"
+[ "$(wc -l < "$TEMP_DIR/asset.sha256")" -eq 1 ] \
+    || die "SHA256SUMS.txt has no single entry for $ASSET; refusing to install"
+(cd "$TEMP_DIR" && "${SHA_CHECK[@]}" asset.sha256 >/dev/null) \
+    || die "checksum mismatch for $ASSET; the download is corrupt or has been tampered with"
+
+echo "Extracting..."
+mkdir "$TEMP_DIR/extract"
+tar -xzf "$TEMP_DIR/$ASSET" -C "$TEMP_DIR/extract" "$BINARY_NAME" \
+    || die "could not extract $BINARY_NAME from $ASSET"
+NEW_BINARY="$TEMP_DIR/extract/$BINARY_NAME"
+if [ -L "$NEW_BINARY" ] || [ ! -f "$NEW_BINARY" ]; then
+    die "$BINARY_NAME in the archive is not a regular file"
 fi
 
-# Make it executable
-chmod +x "$BINARY_NAME"
+VERSION_OUT=$("$NEW_BINARY" --version 2>/dev/null || true)
+case "$VERSION_OUT" in
+    *"$TAG"*) ;;
+    *) die "downloaded binary does not report $TAG (got: '$VERSION_OUT')" ;;
+esac
 
-# Install binary
-echo "📋 Installing to $INSTALL_DIR..."
-
-if [ -w "$INSTALL_DIR" ]; then
-    mv "$BINARY_NAME" "$INSTALL_DIR/"
+SUDO=""
+if [ -d "$INSTALL_DIR" ]; then
+    [ -w "$INSTALL_DIR" ] || SUDO="sudo"
 else
-    echo "🔐 Need sudo access to install to $INSTALL_DIR"
-    sudo mv "$BINARY_NAME" "$INSTALL_DIR/"
+    PARENT="$INSTALL_DIR"
+    while [ ! -d "$PARENT" ]; do PARENT=$(dirname "$PARENT"); done
+    [ -w "$PARENT" ] || SUDO="sudo"
+fi
+if [ -n "$SUDO" ]; then
+    [ "$(id -u)" -ne 0 ] || SUDO=""
+fi
+if [ -n "$SUDO" ]; then
+    need sudo
+    echo "Need sudo to write to $INSTALL_DIR"
 fi
 
-# Cleanup
-cd ~
-rm -rf "$TEMP_DIR"
+echo "Installing to $INSTALL_DIR..."
+$SUDO mkdir -p "$INSTALL_DIR"
+$SUDO install -m 755 "$NEW_BINARY" "$INSTALL_DIR/$BINARY_NAME"
 
 echo ""
-echo "✅ RMX $LATEST_RELEASE installed successfully!"
+echo "rmx $TAG installed to $INSTALL_DIR/$BINARY_NAME"
+case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *) echo "Note: $INSTALL_DIR is not in your PATH" ;;
+esac
 echo ""
 echo "Usage:"
-echo "  rmx -rf /path/to/directory    - Delete directory recursively"
-echo "  rmx version                   - Show version"
-echo "  rmx about                     - Show information"
-echo ""
-echo "⚡ RMX is now ready to use!"
+echo "  rmx -rf /path/to/directory    Delete a directory recursively"
+echo "  rmx --version                 Show version"
+echo "  rmx upgrade                   Upgrade to the latest release"

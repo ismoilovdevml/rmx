@@ -33,7 +33,7 @@ jobs:
       run: cargo fmt -- --check
 
     - name: Run clippy
-      run: cargo clippy -- -D warnings
+      run: cargo clippy --all-targets -- -D warnings
 
     - name: Build debug
       run: cargo build --verbose
@@ -41,25 +41,28 @@ jobs:
     - name: Build release
       run: cargo build --release --verbose
 
-    - name: Run tests
+    # Unit tests plus the CLI integration tests in tests/.
+    - name: Run unit and integration tests
       run: cargo test --release --verbose
 
+    # Guards against dependency bloat creeping back (v0.7.0 was 1.8 MB, most
+    # of it the HTTP/TLS/JSON stack that the upgrader no longer needs).
     - name: Check binary size
       run: |
         ls -lh target/release/rmx
         SIZE=$(stat -f%z target/release/rmx 2>/dev/null || stat -c%s target/release/rmx)
-        echo "Binary size: $SIZE bytes"
-        if [ $SIZE -gt 1048576 ]; then
-          echo "⚠️  Warning: Binary size is larger than 1MB"
-        else
-          echo "✅ Binary size is optimal"
+        LIMIT=1048576
+        echo "Binary size: $SIZE bytes (limit: $LIMIT)"
+        if [ "$SIZE" -gt "$LIMIT" ]; then
+          echo "::error::Release binary is $SIZE bytes, above the $LIMIT byte limit"
+          exit 1
         fi
 
     - name: Run functional test
       run: |
         mkdir -p /tmp/rmx-test
         for i in {1..100}; do
-          dd if=/dev/urandom of=/tmp/rmx-test/file_$i.dat bs=1024 count=10 2>/dev/null
+          dd if=/dev/urandom of="/tmp/rmx-test/file_$i.dat" bs=1024 count=10 2>/dev/null
         done
 
         echo "Testing rmx with -r flag..."
@@ -96,7 +99,7 @@ jobs:
         # Test 1: 1000 files × 100KB
         mkdir -p /tmp/bench1
         for i in {1..1000}; do
-          dd if=/dev/urandom of=/tmp/bench1/file_$i.dat bs=1024 count=100 2>/dev/null
+          dd if=/dev/urandom of="/tmp/bench1/file_$i.dat" bs=1024 count=100 2>/dev/null
         done
 
         echo "Testing RMX..."
@@ -115,7 +118,13 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Test install script syntax
+    - name: Check install scripts
       run: |
         bash -n install.sh
-        echo "✅ Install script syntax is valid"
+        bash -n uninstall.sh
+        if command -v shellcheck >/dev/null 2>&1; then
+          shellcheck install.sh uninstall.sh
+        elif [ "$RUNNER_OS" = "Linux" ]; then
+          echo "::error::shellcheck missing on Linux runner"
+          exit 1
+        fi
