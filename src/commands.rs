@@ -20,6 +20,7 @@ pub fn execute_removal(args: &RmxArgs) {
         verbose: args.verbose,
         force: args.force,
         track_size: !args.quiet,
+        ..Options::default()
     };
 
     for path_str in &args.paths {

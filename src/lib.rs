@@ -32,17 +32,29 @@ impl DeleteStats {
 /// only `--quiet` turns it off.
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
-    pub verbose: bool,
+    /// -r: descend into directories.
+    pub recursive: bool,
+    /// -d: remove empty directories (ignored when `recursive` is set).
+    pub dir: bool,
+    /// -f: ignore ENOENT only. Every other error is still reported.
     pub force: bool,
+    /// -v: print `removed '<path>'` / `removed directory '<path>'` to stdout.
+    pub verbose: bool,
+    /// Report byte totals (one fstatat per file). `--quiet` turns it off.
     pub track_size: bool,
+    /// Worker threads for unlinking. 0 = auto (min(cores, 4)).
+    pub jobs: usize,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Options {
-            verbose: false,
+            recursive: true,
+            dir: false,
             force: false,
+            verbose: false,
             track_size: true,
+            jobs: 0,
         }
     }
 }
@@ -52,9 +64,55 @@ impl Options {
         Options {
             verbose,
             force,
-            track_size: true,
+            ..Options::default()
         }
     }
+}
+
+/// Result of a removal run: what was removed, plus every failure.
+///
+/// Each error is already formatted for the user without the `rmx: ` prefix,
+/// e.g. `cannot remove 'a/b': Permission denied` (strerror text, no
+/// "(os error N)" suffix). The CLI prints them to stderr and exits 1 if any.
+#[derive(Debug, Default)]
+pub struct Outcome {
+    pub stats: DeleteStats,
+    pub errors: Vec<String>,
+}
+
+impl Outcome {
+    pub fn is_ok(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+/// Remove every path in `paths` (the operands from the command line).
+///
+/// Preconditions (enforced by the CLI, not here): no operand resolves to `/`,
+/// none ends in `.` or `..`. Trailing slashes have already been handled.
+///
+/// Per operand: lstat it. Missing -> error unless `force`. Directory -> if
+/// `recursive` remove the whole tree including the directory itself, else if
+/// `dir` rmdir it, else error `cannot remove 'x': Is a directory`. Anything
+/// else (file, symlink, fifo, ...) -> unlink. Symlinks are never followed.
+/// Errors never abort the run: everything removable is removed.
+pub fn remove_all(paths: &[PathBuf], opts: &Options) -> Outcome {
+    let _ = (paths, opts);
+    todo!("engine rewrite")
+}
+
+/// Same contract as [`remove_all`], but asks before each removal and walks
+/// sequentially. `ask` receives a question without the `rmx: ` prefix, e.g.
+/// `remove regular file 'a.txt'?`, `descend into directory 'd'?`,
+/// `remove directory 'd'?`, `remove symbolic link 'l'?`, and returns whether
+/// the user said yes.
+pub fn remove_all_interactive(
+    paths: &[PathBuf],
+    opts: &Options,
+    ask: &mut dyn FnMut(&str) -> bool,
+) -> Outcome {
+    let _ = (paths, opts, ask);
+    todo!("engine rewrite")
 }
 
 /// Shared counters. Workers accumulate locally and commit once per batch, so

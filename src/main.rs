@@ -1,4 +1,5 @@
 mod args;
+mod style;
 mod commands;
 mod upgrade;
 mod util;

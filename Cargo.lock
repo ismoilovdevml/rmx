@@ -425,6 +425,7 @@ dependencies = [
 name = "rmx"
 version = "0.7.0"
 dependencies = [
+ "libc",
  "rayon",
  "serde",
  "serde_json",
