@@ -4,14 +4,18 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct RmxArgs {
     pub paths: Vec<PathBuf>,
-    pub recursive: bool,     // -r, -R, --recursive
-    pub force: bool,         // -f, --force
-    pub interactive: bool,   // -i, --interactive
-    pub verbose: bool,       // -v, --verbose
-    pub dir: bool,           // -d, --dir (remove empty directories)
-    pub quiet: bool,         // -q, --quiet (no summary, no byte accounting)
-    pub preserve_root: bool, // --[no-]preserve-root
-    pub jobs: usize,         // -j, --jobs (0 = auto)
+    pub recursive: bool,      // -r, -R, --recursive
+    pub force: bool,          // -f, --force
+    pub interactive: bool,    // -i, --interactive
+    pub verbose: bool,        // -v, --verbose
+    pub dir: bool,            // -d, --dir (remove empty directories)
+    pub quiet: bool,          // -q, --quiet (no summary, no byte accounting)
+    pub preserve_root: bool,  // --[no-]preserve-root
+    pub jobs: usize,          // -j, --jobs (0 = auto)
+    pub dry_run: bool,        // -n, --dry-run
+    pub one_fs: bool,         // -x, --one-file-system
+    pub force_writable: bool, // -W, --force-writable
+    pub background: bool,     // --async
 }
 
 impl Default for RmxArgs {
@@ -26,6 +30,10 @@ impl Default for RmxArgs {
             quiet: false,
             preserve_root: true,
             jobs: 0,
+            dry_run: false,
+            one_fs: false,
+            force_writable: false,
+            background: false,
         }
     }
 }
@@ -103,6 +111,10 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 "quiet" => out.quiet = true,
                 "preserve-root" => out.preserve_root = true,
                 "no-preserve-root" => out.preserve_root = false,
+                "dry-run" => out.dry_run = true,
+                "one-file-system" => out.one_fs = true,
+                "force-writable" => out.force_writable = true,
+                "async" => out.background = true,
                 "help" => return Ok(Command::Help),
                 "version" => return Ok(Command::Version),
                 "jobs" => {
@@ -131,6 +143,9 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 'v' => out.verbose = true,
                 'd' => out.dir = true,
                 'q' => out.quiet = true,
+                'n' => out.dry_run = true,
+                'x' => out.one_fs = true,
+                'W' => out.force_writable = true,
                 'h' => return Ok(Command::Help),
                 'V' => return Ok(Command::Version),
                 'j' => {
@@ -150,6 +165,9 @@ pub fn parse(args: Vec<OsString>) -> Result<Command, String> {
 
     if out.paths.is_empty() && !out.force {
         return Err("missing operand".to_string());
+    }
+    if out.background && (out.interactive || out.dry_run) {
+        return Err("--async cannot be combined with -i or --dry-run".to_string());
     }
 
     Ok(Command::Remove(out))
@@ -221,7 +239,24 @@ mod tests {
     #[test]
     fn unknown_long_option_is_rejected_even_with_force() {
         assert!(p(&["-f", "--recrusive", "file.txt"]).is_err());
-        assert!(p(&["-x", "file.txt"]).is_err());
+        assert!(p(&["-z", "file.txt"]).is_err());
+    }
+
+    #[test]
+    fn new_flags() {
+        let a = remove(&["-rfnxW", "d"]);
+        assert!(a.dry_run && a.one_fs && a.force_writable);
+        let a = remove(&[
+            "--dry-run",
+            "--one-file-system",
+            "--force-writable",
+            "-r",
+            "d",
+        ]);
+        assert!(a.dry_run && a.one_fs && a.force_writable);
+        assert!(remove(&["--async", "-rf", "d"]).background);
+        assert!(p(&["--async", "-ri", "d"]).is_err());
+        assert!(p(&["--async", "-rn", "d"]).is_err());
     }
 
     #[test]

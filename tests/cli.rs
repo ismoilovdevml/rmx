@@ -44,6 +44,9 @@ impl Drop for TempDir {
     }
 }
 
+#[cfg(not(unix))]
+fn restore_perms(_: &Path) {}
+
 #[cfg(unix)]
 fn restore_perms(p: &Path) {
     use std::os::unix::fs::PermissionsExt;
@@ -88,6 +91,7 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).into_owned()
 }
 
+#[cfg(unix)]
 fn is_root_user() -> bool {
     // SAFETY: geteuid has no preconditions.
     unsafe { libc::geteuid() == 0 }
@@ -419,4 +423,120 @@ fn non_utf8_names() {
         .unwrap();
     assert!(o.status.success(), "{}", stderr(&o));
     assert!(!top.exists());
+}
+
+fn listing(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for e in fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if e.file_type().unwrap().is_dir() {
+                stack.push(p.clone());
+            }
+            out.push(p);
+        }
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn dry_run_removes_nothing_and_reports_counts() {
+    let t = TempDir::new("dry");
+    for i in 0..300 {
+        t.file(&format!("d/{}/f{i}", i % 9));
+    }
+    let before = listing(t.path());
+    let o = rmx(t.path(), &["-rn", "d"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(listing(t.path()), before, "dry run changed the tree");
+    let out = stdout(&o);
+    assert!(
+        out.contains("Would delete: 300 files, 10 directories"),
+        "{out}"
+    );
+
+    let o = rmx(t.path(), &["-rnv", "d"]);
+    assert!(stdout(&o).contains("would remove 'd/"), "{}", stdout(&o));
+    assert_eq!(listing(t.path()), before);
+}
+
+#[test]
+fn async_returns_and_deletes_in_background() {
+    let t = TempDir::new("async");
+    for i in 0..2000 {
+        t.file(&format!("big/{}/f{i}", i % 40));
+    }
+    let keep = t.file("keep.txt");
+    let o = rmx(t.path(), &["-rf", "--async", "big"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    // The name is free the moment rmx returns.
+    assert!(!t.path().join("big").exists());
+    assert!(stdout(&o).contains("in the background"), "{}", stdout(&o));
+
+    // The detached child finishes the job; no trash may be left behind.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let leftovers: Vec<_> = fs::read_dir(t.path())
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".rmx-trash-"))
+            .collect();
+        if leftovers.is_empty() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "background deletion did not finish"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(keep.exists());
+}
+
+#[test]
+fn async_with_files_deletes_them_directly() {
+    let t = TempDir::new("asyncf");
+    let f = t.file("a.txt");
+    let o = rmx(t.path(), &["-rf", "--async", "a.txt"]);
+    assert!(o.status.success());
+    assert!(!f.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn force_writable_removes_read_only_trees() {
+    use std::os::unix::fs::PermissionsExt;
+    if is_root_user() {
+        return;
+    }
+    let t = TempDir::new("ro");
+    t.file("mod/pkg@v1/a.go");
+    t.file("mod/pkg@v1/sub/b.go");
+    for d in ["mod/pkg@v1/sub", "mod/pkg@v1", "mod"] {
+        fs::set_permissions(t.path().join(d), fs::Permissions::from_mode(0o555)).unwrap();
+    }
+
+    let o = rmx(t.path(), &["-rf", "mod"]);
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "read-only tree removed without -W"
+    );
+
+    let o = rmx(t.path(), &["-rfW", "mod"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(!t.path().join("mod").exists());
+}
+
+#[test]
+fn no_progress_line_when_stderr_is_not_a_terminal() {
+    let t = TempDir::new("prog");
+    for i in 0..3000 {
+        t.file(&format!("d/{}/f{i}", i % 30));
+    }
+    let o = rmx(t.path(), &["-rf", "d"]);
+    assert!(o.status.success());
+    assert!(stderr(&o).is_empty(), "{:?}", stderr(&o));
 }

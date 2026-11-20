@@ -46,3 +46,8 @@ pub fn paint(stream: Stream, colour: &str, text: &str) -> String {
         text.to_string()
     }
 }
+
+/// Whether a `\r`-repainted progress line makes sense on this terminal.
+pub fn progress_allowed() -> bool {
+    !std::env::var_os("TERM").is_some_and(|v| v == "dumb")
+}
