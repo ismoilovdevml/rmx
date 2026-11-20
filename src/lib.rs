@@ -77,6 +77,32 @@ pub struct Options {
     pub track_size: bool,
     /// Worker threads for unlinking. 0 = auto (min(cores, 4)).
     pub jobs: usize,
+    /// -n/--dry-run: walk and count exactly as a real run would, but remove
+    /// nothing. Verbose lines read `would remove '<p>'` /
+    /// `would remove directory '<p>'`. Stats report what *would* go.
+    pub dry_run: bool,
+    /// -x/--one-file-system: when recursing, skip any directory whose st_dev
+    /// differs from its operand's. Each skip is reported as an error
+    /// `skipping '<p>', since it's on a different device` (GNU wording) and
+    /// its ancestors are then kept (silently, they are not empty).
+    pub one_file_system: bool,
+    /// -W/--force-writable: when an unlink/rmdir/open fails with EACCES or
+    /// EPERM because the *containing* directory is not writable (or a
+    /// directory is not readable/searchable), add u+rwx to that directory
+    /// with fchmod/fchmodat and retry once. For read-only caches such as
+    /// ~/go/pkg/mod. If the chmod itself fails, report the original error.
+    pub force_writable: bool,
+    /// Live counters for a progress display. The engine adds to them as work
+    /// completes (per batch, not per file); `None` costs nothing.
+    pub progress: Option<&'static Progress>,
+}
+
+/// Live progress counters, updated by the engine while it runs.
+#[derive(Debug, Default)]
+pub struct Progress {
+    pub files: std::sync::atomic::AtomicU64,
+    pub dirs: std::sync::atomic::AtomicU64,
+    pub bytes: std::sync::atomic::AtomicU64,
 }
 
 impl Default for Options {
@@ -88,6 +114,10 @@ impl Default for Options {
             verbose: false,
             track_size: true,
             jobs: 0,
+            dry_run: false,
+            one_file_system: false,
+            force_writable: false,
+            progress: None,
         }
     }
 }

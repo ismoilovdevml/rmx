@@ -40,6 +40,7 @@ pub fn execute_removal(args: &RmxArgs) -> i32 {
         verbose: args.verbose,
         track_size: !args.quiet,
         jobs: args.jobs,
+        ..Options::default()
     };
 
     let outcome = if paths.is_empty() {
