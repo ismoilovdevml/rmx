@@ -175,9 +175,24 @@ Linux, XFS on a 16-vCPU VM, GNU coreutils 9.7 `rm`. Best of 7, tree regenerated
 and `sync`ed before every run, all three tools run back to back on the same tree
 shape. Earlier macOS/APFS measurements of 0.7.0 are in the
 [v0.7.0 README](https://github.com/ismoilovdevml/rmx/tree/v0.7.0#performance);
-macOS/APFS numbers for the current release come from the
-[macOS benchmark workflow](.github/workflows/bench-macos.yml), which anyone can
-run from the Actions tab (`scripts/bench.py` is the same harness).
+**macOS / APFS** — GitHub's `macos-latest` runner (Apple Silicon VM), same
+harness, best of 7, rmx 0.9.0:
+
+| Workload | `rm` | rmx 0.7.0 | **rmx 0.9.0** | vs `rm` |
+|---|---|---|---|---|
+| node_modules: 1,000 dirs × 20 files | 741 ms | 823 ms | **476 ms** | 1.56× |
+| deep: 200 × depth 10, 10k files | 518 ms | 472 ms | **283 ms** | 1.83× |
+| flat: 20,000 files | 989 ms | 1.01 s | **855 ms** | 1.16× |
+| flat: 50,000 files | 4.15 s | 4.29 s | **3.71 s** | 1.12× |
+| 200 × 5 MB files | **22 ms** | 23 ms | 41 ms | 0.53× |
+
+The last row is a known regression on APFS: freeing the extents of several
+large files in parallel contends inside the kernel, and the new engine starts
+its workers once it has a full batch. It costs ~20 ms in absolute terms; a fix
+needs measuring on APFS and is tracked for the next release. Rerun these
+numbers yourself from the Actions tab
+([`bench-macos.yml`](.github/workflows/bench-macos.yml), harness in
+`scripts/bench.py`).
 
 **Where it helps, and where it doesn't.** Trees with many directories —
 `node_modules`, `target/`, `.venv`, monorepos — are where the new engine pays off,
