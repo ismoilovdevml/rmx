@@ -852,26 +852,33 @@ impl Interactive<'_> {
         }
     }
 
-    /// Ask to descend, then list the directory.
+    /// List the directory and, unless it is empty, ask to descend into it.
+    /// An empty directory goes straight to `remove directory` (GNU), exactly
+    /// like the unix engine.
     fn enter(&mut self, path: &Path) -> Step {
-        if !(self.ask)(&format!("descend into directory '{}'?", path.display())) {
-            return Step::Kept;
-        }
+        let descend = |p: &Path| format!("descend into directory '{}'?", p.display());
         let listing = fs::read_dir(path).and_then(|rd| {
             rd.map(|e| e.map(|e| e.path()))
                 .collect::<io::Result<Vec<_>>>()
         });
         match listing {
-            Ok(entries) => Step::Descend(IFrame {
-                path: path.to_path_buf(),
-                entries,
-                next: 0,
-                kept: false,
-            }),
+            Ok(entries) => {
+                if !entries.is_empty() && !(self.ask)(&descend(path)) {
+                    return Step::Kept;
+                }
+                Step::Descend(IFrame {
+                    path: path.to_path_buf(),
+                    entries,
+                    next: 0,
+                    kept: false,
+                })
+            }
             Err(e) => {
-                // Unreadable but possibly empty: offer to remove it anyway.
+                // Unreadable, so possibly non-empty: ask as for a full
+                // directory, then offer to remove it anyway.
                 let why = reason(&e);
-                if (self.ask)(&format!("remove directory '{}'?", path.display()))
+                if (self.ask)(&descend(path))
+                    && (self.ask)(&format!("remove directory '{}'?", path.display()))
                     && self.rmdir(path, Some(&why))
                 {
                     Step::Removed
@@ -1399,6 +1406,32 @@ mod tests {
         assert_eq!(out.stats.files_deleted, 1);
         assert_eq!(out.stats.dirs_deleted, 1);
         assert_eq!(out.stats.total_size, 3);
+        assert!(missing(&d));
+    }
+
+    /// GNU: an empty directory is not "descended into", only removed.
+    /// Must match the unix engine (tests/removal.rs has the same check).
+    #[test]
+    fn interactive_empty_directory_is_not_descended() {
+        let t = TempDir::new("askempty");
+        let d = t.path().join("d");
+        let empty = d.join("empty");
+        fs::create_dir_all(&empty).unwrap();
+        let mut asked = Vec::new();
+        let mut yes = |q: &str| {
+            asked.push(q.to_string());
+            true
+        };
+        let out = remove_all_interactive(std::slice::from_ref(&d), &opts(), &mut yes);
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!(
+            asked,
+            vec![
+                format!("descend into directory '{}'?", d.display()),
+                format!("remove directory '{}'?", empty.display()),
+                format!("remove directory '{}'?", d.display()),
+            ]
+        );
         assert!(missing(&d));
     }
 
