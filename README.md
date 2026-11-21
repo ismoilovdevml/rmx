@@ -38,16 +38,16 @@ brew tap ismoilovdevml/rmx https://github.com/ismoilovdevml/rmx
 brew install ismoilovdevml/rmx/rmx
 ```
 
-**Arch Linux** — a PKGBUILD lives in [`packaging/aur`](packaging/aur) and is
-regenerated on every release (AUR submission is in progress):
+**Arch Linux** (AUR)
 
 ```bash
-git clone https://github.com/ismoilovdevml/rmx && cd rmx/packaging/aur
-makepkg -si
+yay -S rmx             # builds from source
+yay -S rmx-fast-bin    # prebuilt static binary, installs instantly
 ```
 
-The AUR name `rmx-bin` belongs to an unrelated tool that also installs
-`/usr/bin/rmx`, so this package uses its own name and conflicts with it.
+Both are generated from [`packaging/aur`](packaging/aur) and published on every
+release. (`rmx-bin` on the AUR is an unrelated tool; both packages conflict with it
+because it also installs `/usr/bin/rmx`.)
 
 **Windows** — download `rmx-x86_64-pc-windows-msvc.zip` from
 [Releases](https://github.com/ismoilovdevml/rmx/releases/latest), check it against
