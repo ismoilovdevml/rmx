@@ -7,8 +7,25 @@ authors = ["Otabek Ismoilov <ismoilovdev@gmail.com>"]
 description = "Fast alternative to rm command written in Rust"
 license = "MIT"
 repository = "https://github.com/ismoilovdevml/rmx"
+readme = "README.md"
+keywords = ["rm", "delete", "remove", "cli", "filesystem"]
+categories = ["command-line-utilities", "filesystem"]
+# Release, packaging and benchmark tooling; README images resolve against
+# `repository` on crates.io.
+exclude = [".github/", "assets/", "scripts/", "Formula/", "install.sh", "uninstall.sh"]
 
-[dependencies]
+# Prebuilt binaries for `cargo binstall`. The crates.io name `rmx` belongs to
+# an unrelated crate, so use: cargo binstall --git https://github.com/ismoilovdevml/rmx rmx
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/rmx-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+# Only the unix engine and installer call into libc; Windows uses std only.
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [lib]

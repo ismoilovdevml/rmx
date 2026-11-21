@@ -1,0 +1,85 @@
+name: Benchmark
+
+# Manual end-to-end benchmark on a GitHub-hosted runner: /bin/rm vs a
+# baseline release vs this commit (scripts/bench.py). macOS by default, so
+# macOS numbers never have to come from a developer laptop.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per tool and workload (best of N is reported)
+        type: number
+        default: 7
+      baseline:
+        description: Tag to compare against
+        type: string
+        default: v0.7.0
+      runner:
+        description: Runner image
+        type: choice
+        options:
+          - macos-latest
+          - ubuntu-latest
+        default: macos-latest
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    name: rm vs ${{ inputs.baseline }} vs HEAD (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    env:
+      RUNS: ${{ inputs.runs }}
+      BASELINE: ${{ inputs.baseline }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: false
+
+      - name: Validate inputs
+        run: |
+          [[ "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::runs must be 1-99"; exit 1; }
+          git rev-parse --verify --quiet "refs/tags/$BASELINE" >/dev/null \
+            || { echo "::error::no tag $BASELINE"; exit 1; }
+
+      - name: Build HEAD
+        run: cargo build --release
+
+      - name: Build baseline
+        run: |
+          git worktree add "$RUNNER_TEMP/baseline" "refs/tags/$BASELINE"
+          cargo build --release --manifest-path "$RUNNER_TEMP/baseline/Cargo.toml" \
+            --target-dir "$RUNNER_TEMP/baseline-target"
+          "$RUNNER_TEMP/baseline-target/release/rmx" --version
+          ./target/release/rmx --version
+
+      - name: Run benchmark
+        run: |
+          python3 scripts/bench.py \
+            "$RUNNER_TEMP/baseline-target/release/rmx" ./target/release/rmx "$RUNS" \
+            --old-label "rmx $BASELINE" \
+            --root "$RUNNER_TEMP/bench-tree" \
+            --json bench.json --markdown bench.md
+          {
+            echo "## rm vs rmx $BASELINE vs ${GITHUB_SHA::7} on $RUNNER_OS ($RUNNER_ARCH)"
+            echo
+            cat bench.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ inputs.runner }}-${{ github.sha }}
+          path: bench.json
