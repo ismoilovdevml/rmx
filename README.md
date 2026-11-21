@@ -171,7 +171,8 @@ It cannot foresee permission failures that only happen at unlink time.
 | flat: 50,000 files | 924 ms | 1.02 s | **884 ms** | 1.05× |
 | 200 × 5 MB files | 67 ms | 68 ms | **69 ms** | 0.97× |
 
-Linux, XFS on a 16-vCPU VM, GNU coreutils 9.7 `rm`. Best of 7, tree regenerated
+Linux, XFS on a 16-vCPU VM, GNU coreutils 9.7 `rm` (measured on 0.8.0; 0.9.0 is within ±1.5%
+in an interleaved A/B on the same box). Best of 7, tree regenerated
 and `sync`ed before every run, all three tools run back to back on the same tree
 shape. Earlier macOS/APFS measurements of 0.7.0 are in the
 [v0.7.0 README](https://github.com/ismoilovdevml/rmx/tree/v0.7.0#performance);
