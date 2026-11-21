@@ -27,11 +27,12 @@
 //!   so here each directory is re-checked with `symlink_metadata` right before
 //!   it is listed. That narrows the window to microseconds but cannot close it.
 //! * A read-only *file* (FILE_ATTRIBUTE_READONLY) cannot be deleted on
-//!   Windows, and a directory's own permissions never stop deleting its
-//!   entries. So `force_writable` means: on "Permission denied", clear the
-//!   read-only attribute of the entry itself and retry once. Without it the
-//!   error is reported. Note that git marks the files under `.git/objects`
-//!   read-only on Windows.
+//!   Windows. On unix a file's own mode never stops `unlink` (only its
+//!   directory's does), so for parity a read-only file's attribute is always
+//!   cleared and the delete retried once -- otherwise `rmx -rf repo` would
+//!   fail on every file git marks read-only under `.git/objects`. A read-only
+//!   *directory* is the analogue of a unix directory without write
+//!   permission, so its attribute is only cleared with `force_writable`.
 //! * `one_file_system` needs a volume id, which stable std does not expose on
 //!   Windows, so every operand is refused with
 //!   `--one-file-system is not supported on this platform` instead of
@@ -198,15 +199,19 @@ fn clear_readonly(_path: &Path) -> bool {
     false
 }
 
-/// `force_writable` applies to this error: the attribute was cleared, retry.
+/// `force_writable` applies to this directory error: the attribute was
+/// cleared, retry.
 fn retry_writable(e: &io::Error, path: &Path, opts: &Options) -> bool {
     opts.force_writable && e.kind() == io::ErrorKind::PermissionDenied && clear_readonly(path)
 }
 
-/// Delete a non-directory entry.
-fn delete_entry(path: &Path, kind: Kind, opts: &Options) -> io::Result<()> {
+/// Delete a non-directory entry. A read-only file attribute is always
+/// cleared on "Permission denied" (see the module docs for why).
+fn delete_entry(path: &Path, kind: Kind, _opts: &Options) -> io::Result<()> {
     match unlink(path, kind) {
-        Err(e) if retry_writable(&e, path, opts) => unlink(path, kind),
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied && clear_readonly(path) => {
+            unlink(path, kind)
+        }
         r => r,
     }
 }
@@ -1011,21 +1016,11 @@ mod tests {
         fs::symlink_metadata(path).is_err()
     }
 
-    /// Whether permission tests mean anything here, probed rather than
-    /// assumed: root ignores permission bits on unix, and wine does not
-    /// enforce the read-only attribute on delete the way Windows does.
+    /// Whether permission tests mean anything here: root ignores permission
+    /// bits on unix, so probe rather than assume.
+    #[cfg(unix)]
     fn permissions_enforced() -> bool {
         let t = TempDir::new("permprobe");
-        if cfg!(windows) {
-            let f = t.path().join("ro");
-            fs::write(&f, b"x").unwrap();
-            set_readonly(&f, true);
-            let enforced = fs::remove_file(&f).is_err();
-            if enforced {
-                set_readonly(&f, false);
-            }
-            return enforced;
-        }
         let locked = t.path().join("locked");
         fs::create_dir(&locked).unwrap();
         set_readonly(&locked, true);
@@ -1294,12 +1289,13 @@ mod tests {
 
     /// A failure deep down keeps every ancestor and reports only the real
     /// error, not "Directory not empty" for each parent. On unix the failure
-    /// is a non-writable directory (skipped as root); on Windows it is a
-    /// read-only file.
+    /// is a non-writable directory (skipped as root); on Windows it is a file
+    /// held open without delete sharing.
+    #[cfg(unix)]
     #[test]
     fn failure_below_keeps_ancestors_quietly() {
         if !permissions_enforced() {
-            eprintln!("skipped: permissions are not enforced here (root, wine)");
+            eprintln!("skipped: permissions are not enforced here (root)");
             return;
         }
         let t = TempDir::new("fail");
@@ -1307,12 +1303,7 @@ mod tests {
         let stuck = root.join("a/b");
         write_file(&stuck.join("x"), 1);
         write_file(&root.join("other/y"), 1);
-        let blocker = if cfg!(windows) {
-            stuck.join("x")
-        } else {
-            stuck.clone()
-        };
-        set_readonly(&blocker, true);
+        set_readonly(&stuck, true);
 
         let out = remove_all(std::slice::from_ref(&root), &opts());
         assert_eq!(
@@ -1325,41 +1316,60 @@ mod tests {
         assert!(stuck.join("x").exists());
         assert!(missing(&root.join("other")));
 
-        set_readonly(&blocker, false);
+        set_readonly(&stuck, false);
         let out = remove_all(std::slice::from_ref(&root), &opts());
         assert!(out.errors.is_empty(), "{:?}", out.errors);
         assert!(missing(&root));
     }
 
-    /// Windows only: `force_writable` clears the read-only attribute.
     #[cfg(windows)]
     #[test]
-    fn force_writable_clears_readonly_files() {
-        if !permissions_enforced() {
-            eprintln!("skipped: the read-only attribute is not enforced (wine)");
+    fn failure_below_keeps_ancestors_quietly() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let t = TempDir::new("fail");
+        let root = t.path().join("root");
+        let stuck = root.join("a").join("b");
+        let x = stuck.join("x");
+        write_file(&x, 1);
+        write_file(&root.join("other").join("y"), 1);
+        // No FILE_SHARE_DELETE: Windows refuses to delete it while open.
+        let hold = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&x)
+            .unwrap();
+        let out = remove_all(std::slice::from_ref(&root), &opts());
+        if out.errors.is_empty() {
+            eprintln!("skipped: share modes are not enforced here (wine)");
             return;
         }
+        assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
+        assert!(
+            out.errors[0].starts_with(&format!("cannot remove '{}'", x.display())),
+            "{:?}",
+            out.errors
+        );
+        assert!(x.exists());
+        assert!(missing(&root.join("other")));
+
+        drop(hold);
+        let out = remove_all(std::slice::from_ref(&root), &opts());
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert!(missing(&root));
+    }
+
+    /// Windows only: a read-only file goes without -W, like a 0444 file on
+    /// unix (git marks `.git/objects` read-only).
+    #[cfg(windows)]
+    #[test]
+    fn readonly_files_are_removed_without_force_writable() {
         let t = TempDir::new("ro");
         let root = t.path().join("root");
-        let file = root.join("objects/ro.pack");
+        let file = root.join("objects").join("ro.pack");
         write_file(&file, 9);
         set_readonly(&file, true);
 
         let out = remove_all(std::slice::from_ref(&root), &opts());
-        assert_eq!(
-            out.errors,
-            vec![format!(
-                "cannot remove '{}': Permission denied",
-                file.display()
-            )]
-        );
-        assert!(file.exists());
-
-        let w = Options {
-            force_writable: true,
-            ..opts()
-        };
-        let out = remove_all(std::slice::from_ref(&root), &w);
         assert!(out.errors.is_empty(), "{:?}", out.errors);
         assert_eq!(out.stats.files_deleted, 1);
         assert!(missing(&root));

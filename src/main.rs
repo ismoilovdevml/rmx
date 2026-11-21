@@ -34,7 +34,10 @@ fn main() {
             }
         }
         Command::CheckUpdate => match upgrade::check_for_updates() {
-            Ok(Some(_)) => println!("Run 'rmx upgrade' to update"),
+            Ok(Some(_)) if cfg!(unix) => println!("Run 'rmx upgrade' to update"),
+            Ok(Some(_)) => {
+                println!("Download it from https://github.com/ismoilovdevml/rmx/releases")
+            }
             Ok(None) => {}
             Err(e) => {
                 eprintln!("Error: {e}");

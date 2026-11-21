@@ -10,7 +10,7 @@ checksum = "58f929b4d672ea937a23a1ab494143d968337a5f47e56d0815df1e0890ddf174"
 
 [[package]]
 name = "rmx"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "libc",
 ]

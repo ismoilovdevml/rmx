@@ -194,7 +194,11 @@ fn interactive_recursive_asks_per_entry() {
     let o = rmx_in(t.path(), &["-ri", "d"], "y\nn\ny\n");
     let err = stderr(&o);
     assert!(err.contains("descend into directory 'd'?"), "{err}");
-    assert!(err.contains("remove regular file 'd/keep.txt'?"), "{err}");
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(
+        err.contains(&format!("remove regular file 'd{sep}keep.txt'?")),
+        "{err}"
+    );
     // Declined the file, so it and its directory survive.
     assert!(t.path().join("d/keep.txt").exists());
 }
@@ -458,7 +462,12 @@ fn dry_run_removes_nothing_and_reports_counts() {
     );
 
     let o = rmx(t.path(), &["-rnv", "d"]);
-    assert!(stdout(&o).contains("would remove 'd/"), "{}", stdout(&o));
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(
+        stdout(&o).contains(&format!("would remove 'd{sep}")),
+        "{}",
+        stdout(&o)
+    );
     assert_eq!(listing(t.path()), before);
 }
 

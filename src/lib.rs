@@ -2106,7 +2106,8 @@ pub fn remove_directory_interactive_with(
     ))
 }
 
-#[cfg(not(unix))]
+// The portable engine is what Windows runs; its unit tests also run on unix.
+#[cfg(any(not(unix), test))]
 mod portable;
 #[cfg(not(unix))]
 pub use portable::{remove_all, remove_all_interactive};

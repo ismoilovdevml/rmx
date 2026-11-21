@@ -31,6 +31,17 @@ The script verifies the archive against the release's `SHA256SUMS.txt` and
 refuses to install if it does not match. `INSTALL_DIR=~/.local/bin` installs
 somewhere else; `RMX_VERSION=v0.8.0` pins a version.
 
+**Homebrew** (macOS, Linux)
+
+```bash
+brew tap ismoilovdevml/rmx https://github.com/ismoilovdevml/rmx
+brew install ismoilovdevml/rmx/rmx
+```
+
+**Windows** — download `rmx-x86_64-pc-windows-msvc.zip` from
+[Releases](https://github.com/ismoilovdevml/rmx/releases/latest), check it against
+`SHA256SUMS.txt`, and put `rmx.exe` on your `PATH`.
+
 <details>
 <summary>Other methods</summary>
 
@@ -44,6 +55,13 @@ BASE=https://github.com/ismoilovdevml/rmx/releases/latest/download
 curl -fsSLO "$BASE/rmx-$TARGET.tar.gz" && curl -fsSLO "$BASE/SHA256SUMS.txt"
 grep "rmx-$TARGET.tar.gz" SHA256SUMS.txt | shasum -a 256 -c -
 tar xzf "rmx-$TARGET.tar.gz" && sudo install -m 755 rmx /usr/local/bin/
+```
+
+**cargo-binstall** (the name `rmx` on crates.io belongs to an unrelated
+project, so point it at this repository)
+
+```bash
+cargo binstall --git https://github.com/ismoilovdevml/rmx rmx
 ```
 
 **From source** (Rust 1.88+)
@@ -71,6 +89,9 @@ rmx -rfq cache/              # silent, for scripts
 rmx -i secrets.env           # prompt first
 rmx -d empty_dir/            # only if empty
 rmx -- -weird-name.txt       # names that start with '-'
+rmx -rn node_modules/        # dry run: what would go, how big
+rmx -rf --async target/      # return at once, delete in the background
+rmx -rfW ~/go/pkg/mod        # read-only caches (Go modules, Bazel)
 ```
 
 | Flag | Meaning |
@@ -82,6 +103,10 @@ rmx -- -weird-name.txt       # names that start with '-'
 | `-d`, `--dir` | remove empty directories |
 | `-q`, `--quiet` | no summary, skip `stat` per file |
 | `-j`, `--jobs <N>` | unlink workers (default `min(cores, 4)`) |
+| `-n`, `--dry-run` | walk and count, remove nothing (`-v` lists `would remove '…'`) |
+| `-x`, `--one-file-system` | don't cross into other mounted file systems |
+| `-W`, `--force-writable` | add `u+rwx` to read-only directories so their contents can go |
+| `--async` | rename the tree aside instantly, delete it in a detached process |
 | `--no-preserve-root` | allow `-r` on `/` (refused by default) |
 | `--` | everything after is a path |
 | `-V`, `--version` | print the version |
@@ -104,6 +129,24 @@ only commands when given alone, so `rmx dev notes.txt` removes a file called
   `rm -f` through.
 - Colour only on a terminal; `NO_COLOR` turns it off.
 - Hard-linked files (pnpm stores) are counted once in the size total.
+- A one-line live counter appears on stderr when a deletion runs longer than
+  300 ms and stderr is a terminal. Never in pipes, with `-v`, `-i` or `-q`.
+
+### `--async`
+
+`rmx -rf --async node_modules` renames each directory operand to a hidden
+sibling (`.rmx-trash-<pid>-…`) — an atomic, instant rename within the same
+directory — and hands it to a detached `rmx -rfq` process, so the prompt comes
+back immediately and the name is free to reuse. Files are deleted in the
+foreground as usual. If the rename is not possible (no write permission on the
+parent), rmx deletes synchronously instead. If the background process is killed
+(reboot, OOM), the `.rmx-trash-*` directory stays; remove it with `rmx -rf`.
+
+### `--dry-run`
+
+Runs the same walk with the same checks and errors, and reports what would be
+removed — counts, size, and with `-v` every path — without touching anything.
+It cannot foresee permission failures that only happen at unlink time.
 
 ## Performance
 
@@ -121,7 +164,9 @@ Linux, XFS on a 16-vCPU VM, GNU coreutils 9.7 `rm`. Best of 7, tree regenerated
 and `sync`ed before every run, all three tools run back to back on the same tree
 shape. Earlier macOS/APFS measurements of 0.7.0 are in the
 [v0.7.0 README](https://github.com/ismoilovdevml/rmx/tree/v0.7.0#performance);
-0.8.0 has not been re-benchmarked on macOS yet.
+macOS/APFS numbers for the current release come from the
+[macOS benchmark workflow](.github/workflows/bench-macos.yml), which anyone can
+run from the Actions tab (`scripts/bench.py` is the same harness).
 
 **Where it helps, and where it doesn't.** Trees with many directories —
 `node_modules`, `target/`, `.venv`, monorepos — are where the new engine pays off,
@@ -130,6 +175,18 @@ par with `rm` on Linux: the kernel takes the parent directory's lock for every
 unlink, so extra threads in one directory only queue (measured: 1 worker 926 ms,
 2 workers 1,188 ms on 50k files). Large files are dominated by extent freeing
 inside the kernel, and no user-space trick moves that.
+
+### Windows
+
+Windows uses a portable engine built on the standard library (no handle-relative
+calls there), with the same flags, messages and exit codes. Differences:
+
+- A read-only *file* is deleted anyway (its attribute is cleared), just as a
+  `0444` file is on unix — otherwise `rmx -rf repo` would fail on every object
+  git marks read-only. Read-only *directories* need `-W`, like unix.
+- `-x` / `--one-file-system` is refused: stable Rust exposes no volume id.
+- Hard links are counted once per link in the size total.
+- `rmx upgrade` is not available yet; `rmx check-update` works.
 
 ## How it works
 
