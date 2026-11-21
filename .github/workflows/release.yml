@@ -21,14 +21,26 @@ jobs:
           # every target builds natively on a matching runner -- no `cross`.
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            archive: tar.gz
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
+            archive: tar.gz
 
           # macOS builds
           - os: macos-latest
             target: x86_64-apple-darwin
+            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
+            archive: tar.gz
+
+          # Windows build (portable std-only engine)
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout code
@@ -50,21 +62,29 @@ jobs:
       - name: Build
         run: |
           cargo build --release --target ${{ matrix.target }}
-          file target/${{ matrix.target }}/release/rmx || true
+          file target/${{ matrix.target }}/release/rmx* || true
 
       # No separate strip step: Cargo.toml sets `strip = true` for release.
 
+      # The archive lands in the workspace root (three levels up), which
+      # avoids passing a Windows path to bash.
       - name: Create archive
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHIVE: ${{ matrix.archive }}
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf rmx-${{ matrix.target }}.tar.gz rmx
-          mv rmx-${{ matrix.target }}.tar.gz ${{ github.workspace }}/
+          cd "target/$TARGET/release"
+          if [ "$ARCHIVE" = "zip" ]; then
+            7z a -tzip "../../../rmx-$TARGET.zip" rmx.exe
+          else
+            tar czf "../../../rmx-$TARGET.tar.gz" rmx
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: rmx-${{ matrix.target }}
-          path: rmx-${{ matrix.target }}.tar.gz
+          path: rmx-${{ matrix.target }}.${{ matrix.archive }}
 
   release:
     name: Create Release
@@ -81,14 +101,14 @@ jobs:
 
       - name: Move artifacts to root
         run: |
-          find artifacts -name "*.tar.gz" -exec mv {} . \;
-          ls -lh ./*.tar.gz
+          find artifacts \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} . \;
+          ls -lh ./*.tar.gz ./*.zip
 
       # `rmx upgrade` and install.sh refuse to install without this file.
       - name: Generate checksums
         run: |
-          sha256sum rmx-*.tar.gz > SHA256SUMS.txt
-          test "$(wc -l < SHA256SUMS.txt)" -eq 4
+          sha256sum rmx-*.tar.gz rmx-*.zip > SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 5
           cat SHA256SUMS.txt
 
       - name: Create Release
@@ -96,21 +116,26 @@ jobs:
         with:
           files: |
             rmx-*.tar.gz
+            rmx-*.zip
             SHA256SUMS.txt
           body: |
             ## RMX ${{ github.ref_name }}
 
             ### 📥 Installation
 
-            **Linux (x86_64):**
+            **Linux / macOS:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
             ```
 
-            **macOS (Intel/Apple Silicon):**
+            **Homebrew (macOS, Linux):**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+            brew tap ismoilovdevml/rmx https://github.com/${{ github.repository }}
+            brew install ismoilovdevml/rmx/rmx
             ```
+
+            **Windows:** download `rmx-x86_64-pc-windows-msvc.zip`, unpack it and
+            put `rmx.exe` on your `PATH`.
 
             ### 📦 Pre-built Binaries
 
@@ -119,6 +144,7 @@ jobs:
             - `rmx-aarch64-unknown-linux-musl.tar.gz` - Linux ARM64 (static binary)
             - `rmx-x86_64-apple-darwin.tar.gz` - macOS Intel
             - `rmx-aarch64-apple-darwin.tar.gz` - macOS Apple Silicon
+            - `rmx-x86_64-pc-windows-msvc.zip` - Windows x86_64
 
             ### Verifying downloads
 
@@ -129,6 +155,9 @@ jobs:
             sha256sum --ignore-missing -c SHA256SUMS.txt      # Linux
             shasum -a 256 --ignore-missing -c SHA256SUMS.txt  # macOS
             ```
+            ```powershell
+            Get-FileHash rmx-x86_64-pc-windows-msvc.zip -Algorithm SHA256  # Windows
+            ```
 
             ### 🚀 What's Changed
 
@@ -136,3 +165,39 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The repository doubles as a Homebrew tap (Formula/rmx.rb). Point it at the
+  # archives just published. main has no branch protection, so the workflow
+  # token can push; the commit does not trigger other workflows.
+  homebrew:
+    name: Update Homebrew formula
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -p SHA256SUMS.txt -D "$RUNNER_TEMP"
+
+      - name: Regenerate formula
+        run: scripts/update-formula.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/SHA256SUMS.txt"
+
+      - name: Commit to main
+        run: |
+          if git diff --quiet -- Formula/rmx.rb; then
+            echo "Formula/rmx.rb already up to date"
+            exit 0
+          fi
+          git diff -- Formula/rmx.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/rmx.rb
+          git commit -m "[RELEASE] Update Homebrew formula to $GITHUB_REF_NAME"
+          git push origin HEAD:main

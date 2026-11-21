@@ -42,6 +42,9 @@ echo "Installing rmx - fast alternative to rm"
 case "$(uname -s)" in
     Linux*)  OS="linux" ;;
     Darwin*) OS="darwin" ;;
+    MINGW*|MSYS*|CYGWIN*)
+        die "this script does not install on Windows; download rmx-x86_64-pc-windows-msvc.zip
+from https://github.com/ismoilovdevml/rmx/releases and put rmx.exe on your PATH" ;;
     *)       die "unsupported OS: $(uname -s)" ;;
 esac
 

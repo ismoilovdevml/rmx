@@ -6,22 +6,34 @@
 //! Every download is checked against the release's `SHA256SUMS.txt` before
 //! anything is extracted, and the upgrade fails closed when that file or the
 //! asset's line in it is missing.
+//!
+//! Installing is unix-only for now (it relies on mkdtemp, tar and an atomic
+//! rename over the running binary, which Windows does not allow). On other
+//! platforms `check-update` still works through the `curl.exe` that ships
+//! with Windows 10 and later, and `upgrade` points to the releases page.
 
 use crate::style::{self, Stream};
-use std::collections::hash_map::RandomState;
-use std::env;
-use std::ffi::{CString, OsString};
-use std::fs;
-use std::hash::{BuildHasher, Hasher};
-use std::io::{self, ErrorKind, Read, Write};
-use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::io::ErrorKind;
 use std::process::Command;
+#[cfg(unix)]
+use std::{
+    collections::hash_map::RandomState,
+    env,
+    ffi::{CString, OsString},
+    fs,
+    hash::{BuildHasher, Hasher},
+    io::{self, Read, Write},
+    os::unix::ffi::OsStringExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    path::{Path, PathBuf},
+};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const REPO_URL: &str = "https://github.com/ismoilovdevml/rmx";
+#[cfg(unix)]
 const SUMS_FILE: &str = "SHA256SUMS.txt";
+/// Where curl writes the body it is told to discard.
+const NULL_DEVICE: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 
 type Version = (u64, u64, u64);
 
@@ -33,11 +45,14 @@ fn good(text: &str) {
     println!("{}", style::paint(Stream::Stdout, style::GREEN, text));
 }
 
+// Only the unix installer warns; kept compiled so style::YELLOW stays used.
+#[cfg_attr(not(unix), allow(dead_code))]
 fn warn(text: &str) {
     eprintln!("{}", style::paint(Stream::Stderr, style::YELLOW, text));
 }
 
 /// Get the target triple for the current platform
+#[cfg(unix)]
 fn get_target_triple() -> Result<&'static str, String> {
     let os = env::consts::OS;
     let arch = env::consts::ARCH;
@@ -125,6 +140,7 @@ fn run_curl(mut cmd: Command, what: &str) -> Result<Vec<u8>, String> {
     Ok(out.stdout)
 }
 
+#[cfg(unix)]
 fn download(url: &str, dest: &Path) -> Result<(), String> {
     let mut cmd = curl();
     cmd.arg("-o").arg(dest).arg(url);
@@ -136,7 +152,7 @@ fn download(url: &str, dest: &Path) -> Result<(), String> {
 fn resolve_latest_tag() -> Result<String, String> {
     let mut cmd = curl();
     cmd.arg("-o")
-        .arg(Path::new("/dev/null"))
+        .arg(NULL_DEVICE)
         .args(["-w", "%{url_effective}"])
         .arg(format!("{REPO_URL}/releases/latest"));
     let out = run_curl(cmd, "latest release info")?;
@@ -152,6 +168,7 @@ fn resolve_latest_tag() -> Result<String, String> {
     Ok(tag.to_string())
 }
 
+#[cfg(unix)]
 fn release_url(tag: &str, file: &str) -> String {
     format!("{REPO_URL}/releases/download/{tag}/{file}")
 }
@@ -160,6 +177,7 @@ fn release_url(tag: &str, file: &str) -> String {
 // SHA-256 (FIPS 180-4)
 // ---------------------------------------------------------------------------
 
+#[cfg(unix)]
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -171,6 +189,7 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
+#[cfg(unix)]
 struct Sha256 {
     state: [u32; 8],
     buf: [u8; 64],
@@ -178,6 +197,7 @@ struct Sha256 {
     total_len: u64,
 }
 
+#[cfg(unix)]
 impl Sha256 {
     fn new() -> Self {
         Sha256 {
@@ -260,10 +280,12 @@ impl Sha256 {
     }
 }
 
+#[cfg(unix)]
 fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+#[cfg(unix)]
 fn sha256_file(path: &Path) -> io::Result<String> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
@@ -280,6 +302,7 @@ fn sha256_file(path: &Path) -> io::Result<String> {
 
 /// Find `asset`'s digest in `sha256sum`-format text (`<hex>  <name>` or
 /// `<hex> *<name>`).
+#[cfg(unix)]
 fn expected_digest(sums: &str, asset: &str) -> Result<String, String> {
     let mut found: Option<String> = None;
     for line in sums.lines() {
@@ -313,6 +336,7 @@ fn expected_digest(sums: &str, asset: &str) -> Result<String, String> {
     })
 }
 
+#[cfg(unix)]
 fn verify_checksum(file: &Path, asset: &str, sums: &str) -> Result<(), String> {
     let expected = expected_digest(sums, asset)?;
     let actual = sha256_file(file).map_err(|e| format!("Failed to hash {}: {}", asset, e))?;
@@ -331,8 +355,10 @@ fn verify_checksum(file: &Path, asset: &str, sums: &str) -> Result<(), String> {
 
 /// A directory created with `mkdtemp(3)` (mode 0700, unpredictable name) and
 /// removed on drop, including on every error path.
+#[cfg(unix)]
 struct TempDir(PathBuf);
 
+#[cfg(unix)]
 impl TempDir {
     fn new() -> Result<Self, String> {
         let template = env::temp_dir().join("rmx-upgrade.XXXXXX");
@@ -356,6 +382,7 @@ impl TempDir {
     }
 }
 
+#[cfg(unix)]
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
@@ -366,6 +393,7 @@ impl Drop for TempDir {
 // Extract, sanity-check, install
 // ---------------------------------------------------------------------------
 
+#[cfg(unix)]
 fn extract(tarball: &Path, dir: &Path) -> Result<PathBuf, String> {
     let out_dir = dir.join("extract");
     fs::create_dir(&out_dir).map_err(|e| format!("Failed to create extract dir: {}", e))?;
@@ -390,6 +418,7 @@ fn extract(tarball: &Path, dir: &Path) -> Result<PathBuf, String> {
 }
 
 /// Run the new binary once and make sure it reports the version we expect.
+#[cfg(unix)]
 fn sanity_check(binary: &Path, version: &str) -> Result<(), String> {
     let out = Command::new(binary)
         .arg("--version")
@@ -407,6 +436,7 @@ fn sanity_check(binary: &Path, version: &str) -> Result<(), String> {
 }
 
 /// Create a uniquely named staging file next to `target` with `O_EXCL`.
+#[cfg(unix)]
 fn create_staging(dir: &Path) -> io::Result<(PathBuf, fs::File)> {
     let mut last_err = io::Error::new(ErrorKind::AlreadyExists, "no unique staging name");
     for _ in 0..8 {
@@ -427,6 +457,7 @@ fn create_staging(dir: &Path) -> io::Result<(PathBuf, fs::File)> {
     Err(last_err)
 }
 
+#[cfg(unix)]
 fn copy_into(new_binary: &Path, file: &mut fs::File) -> io::Result<()> {
     let mut src = fs::File::open(new_binary)?;
     io::copy(&mut src, file)?;
@@ -448,6 +479,7 @@ fn copy_into(new_binary: &Path, file: &mut fs::File) -> io::Result<()> {
 ///
 /// The staging file has an unpredictable name and is created with `O_EXCL`, so
 /// nothing pre-planted in the install directory can be picked up instead.
+#[cfg(unix)]
 fn install_binary(new_binary: &Path, current_exe: &Path) -> Result<(), String> {
     let dir = current_exe.parent().ok_or_else(|| {
         format!(
@@ -487,6 +519,7 @@ fn install_binary(new_binary: &Path, current_exe: &Path) -> Result<(), String> {
 }
 
 /// Print instructions and return the error to bail out with.
+#[cfg(unix)]
 fn permission_denied(current_exe: &Path) -> String {
     warn(&format!(
         "Permission denied writing {}. Re-run with sudo:",
@@ -497,6 +530,7 @@ fn permission_denied(current_exe: &Path) -> String {
 }
 
 /// Verify, extract, sanity-check and install a downloaded release tarball.
+#[cfg(unix)]
 fn install_verified(
     dir: &Path,
     tarball: &Path,
@@ -515,6 +549,7 @@ fn install_verified(
 }
 
 /// Download release `tag` for `target` and install it over `current_exe`.
+#[cfg(unix)]
 fn perform_upgrade(tag: &str, target: &str, current_exe: &Path) -> Result<(), String> {
     if parse_tag(tag).is_none() {
         return Err(format!("Refusing unexpected release tag: {:?}", tag));
@@ -575,6 +610,7 @@ pub fn check_for_updates() -> Result<Option<String>, String> {
 }
 
 /// Download and install the latest version
+#[cfg(unix)]
 pub fn upgrade() -> Result<(), String> {
     info("Starting upgrade process...");
 
@@ -608,7 +644,15 @@ pub fn upgrade() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
+/// Installing over the running binary is not implemented off unix yet.
+#[cfg(not(unix))]
+pub fn upgrade() -> Result<(), String> {
+    Err(format!(
+        "rmx upgrade is not supported on Windows yet; download the latest release from {REPO_URL}/releases"
+    ))
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
