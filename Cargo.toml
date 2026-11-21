@@ -12,7 +12,7 @@ keywords = ["rm", "delete", "remove", "cli", "filesystem"]
 categories = ["command-line-utilities", "filesystem"]
 # Release, packaging and benchmark tooling; README images resolve against
 # `repository` on crates.io.
-exclude = [".github/", "assets/", "scripts/", "Formula/", "install.sh", "uninstall.sh"]
+exclude = ["packaging/", ".github/", "assets/", "scripts/", "Formula/", "install.sh", "uninstall.sh"]
 
 # Prebuilt binaries for `cargo binstall`. The crates.io name `rmx` belongs to
 # an unrelated crate, so use: cargo binstall --git https://github.com/ismoilovdevml/rmx rmx

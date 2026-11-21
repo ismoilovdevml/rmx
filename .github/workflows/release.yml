@@ -170,7 +170,7 @@ jobs:
   # archives just published. main has no branch protection, so the workflow
   # token can push; the commit does not trigger other workflows.
   homebrew:
-    name: Update Homebrew formula
+    name: Update Homebrew formula and AUR PKGBUILD
     needs: release
     runs-on: ubuntu-latest
     permissions:
@@ -189,15 +189,60 @@ jobs:
       - name: Regenerate formula
         run: scripts/update-formula.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/SHA256SUMS.txt"
 
+      - name: Regenerate AUR PKGBUILD
+        run: scripts/update-aur.sh "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/SHA256SUMS.txt" packaging/aur
+
       - name: Commit to main
         run: |
-          if git diff --quiet -- Formula/rmx.rb; then
-            echo "Formula/rmx.rb already up to date"
+          if git diff --quiet -- Formula/rmx.rb packaging/aur && \
+             [ -z "$(git status --porcelain -- packaging/aur)" ]; then
+            echo "Formula and PKGBUILD already up to date"
             exit 0
           fi
-          git diff -- Formula/rmx.rb
+          git diff -- Formula/rmx.rb packaging/aur
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/rmx.rb
-          git commit -m "[RELEASE] Update Homebrew formula to $GITHUB_REF_NAME"
+          git add Formula/rmx.rb packaging/aur
+          git commit -m "[RELEASE] Update Homebrew formula and AUR PKGBUILD to $GITHUB_REF_NAME"
           git push origin HEAD:main
+
+  aur:
+    name: Publish to AUR
+    needs: homebrew
+    runs-on: ubuntu-latest
+    # Opt-in: does nothing until the maintainer adds the AUR_SSH_PRIVATE_KEY
+    # secret (the private key of an SSH key registered on aur.archlinux.org).
+    env:
+      AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Checkout main
+        if: env.AUR_KEY != ''
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Push PKGBUILD and .SRCINFO to the AUR
+        if: env.AUR_KEY != ''
+        run: |
+          set -euo pipefail
+          pkg=$(sed -n 's/^pkgname=//p' packaging/aur/PKGBUILD)
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_KEY" > ~/.ssh/aur && chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git clone "ssh://aur@aur.archlinux.org/$pkg.git" "$RUNNER_TEMP/aur"
+          cp packaging/aur/PKGBUILD packaging/aur/.SRCINFO "$RUNNER_TEMP/aur/"
+          cd "$RUNNER_TEMP/aur"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "AUR already at this version"
+            exit 0
+          fi
+          git config user.name "Otabek Ismoilov"
+          git config user.email "ismoilovdev@gmail.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to ${GITHUB_REF_NAME#v}"
+          git push origin HEAD:master
+
+      - name: Skipped
+        if: env.AUR_KEY == ''
+        run: echo "AUR_SSH_PRIVATE_KEY is not set; skipping AUR publish."

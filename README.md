@@ -38,6 +38,17 @@ brew tap ismoilovdevml/rmx https://github.com/ismoilovdevml/rmx
 brew install ismoilovdevml/rmx/rmx
 ```
 
+**Arch Linux** — a PKGBUILD lives in [`packaging/aur`](packaging/aur) and is
+regenerated on every release (AUR submission is in progress):
+
+```bash
+git clone https://github.com/ismoilovdevml/rmx && cd rmx/packaging/aur
+makepkg -si
+```
+
+The AUR name `rmx-bin` belongs to an unrelated tool that also installs
+`/usr/bin/rmx`, so this package uses its own name and conflicts with it.
+
 **Windows** — download `rmx-x86_64-pc-windows-msvc.zip` from
 [Releases](https://github.com/ismoilovdevml/rmx/releases/latest), check it against
 `SHA256SUMS.txt`, and put `rmx.exe` on your `PATH`.
