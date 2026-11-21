@@ -1,5 +1,6 @@
 use rmx_lib::{
-    remove_all, remove_all_interactive, remove_directory_recursive_with, remove_file, Options,
+    remove_all, remove_all_interactive, remove_directory_recursive_with, remove_file, DeleteStats,
+    Options, Progress,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -178,11 +179,13 @@ fn symlink_size_is_the_link_not_the_target() {
 
 // -- remove_all ---------------------------------------------------------------
 
+#[cfg(unix)]
 fn is_root() -> bool {
     // SAFETY: geteuid has no preconditions.
     unsafe { libc::geteuid() == 0 }
 }
 
+#[cfg(unix)]
 fn set_mode(path: &Path, mode: u32) {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
@@ -255,6 +258,7 @@ fn remove_all_top_level_file_operands() {
     assert_eq!(fs::read_dir(tmp.path()).unwrap().count(), 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn remove_all_missing_operand_errors_unless_force() {
     let tmp = TempDir::new("all-missing");
@@ -281,6 +285,7 @@ fn remove_all_missing_operand_errors_unless_force() {
     assert!(out.is_ok(), "{:?}", out.errors);
 }
 
+#[cfg(unix)]
 #[test]
 fn non_recursive_directory_is_an_error() {
     let tmp = TempDir::new("all-isdir");
@@ -298,6 +303,7 @@ fn non_recursive_directory_is_an_error() {
     assert!(d.join("f").exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn dir_flag_removes_empty_and_refuses_non_empty() {
     let tmp = TempDir::new("all-d");
@@ -323,6 +329,7 @@ fn dir_flag_removes_empty_and_refuses_non_empty() {
     assert!(full.join("f").exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn force_still_reports_permission_errors_and_removes_siblings() {
     if is_root() {
@@ -360,6 +367,7 @@ fn force_still_reports_permission_errors_and_removes_siblings() {
     assert_eq!(out.stats.files_deleted, 301);
 }
 
+#[cfg(unix)]
 #[test]
 fn unreadable_directories_are_removed_when_empty() {
     if is_root() {
@@ -381,6 +389,7 @@ fn unreadable_directories_are_removed_when_empty() {
     assert!(!exists(&top_empty));
 }
 
+#[cfg(unix)]
 #[test]
 fn unreadable_non_empty_directory_reports_open_error() {
     if is_root() {
@@ -406,6 +415,7 @@ fn unreadable_non_empty_directory_reports_open_error() {
     assert!(!exists(&root.join("g")));
 }
 
+#[cfg(unix)]
 #[test]
 fn symlink_to_directory_operand_is_unlinked_not_followed() {
     let tmp = TempDir::new("all-symop");
@@ -421,6 +431,7 @@ fn symlink_to_directory_operand_is_unlinked_not_followed() {
     assert_eq!(out.stats.files_deleted, 1);
 }
 
+#[cfg(unix)]
 #[test]
 fn symlink_inside_tree_is_not_followed() {
     let tmp = TempDir::new("all-symin");
@@ -438,6 +449,7 @@ fn symlink_inside_tree_is_not_followed() {
     assert_eq!(out.stats.files_deleted, 3);
 }
 
+#[cfg(unix)]
 #[test]
 fn hard_links_are_counted_once() {
     let tmp = TempDir::new("all-hardlink");
@@ -456,6 +468,7 @@ fn hard_links_are_counted_once() {
     assert!(!exists(&root));
 }
 
+#[cfg(unix)]
 /// Build `depth` nested directories named "d" with fd-relative calls, since
 /// the full path is far beyond PATH_MAX. Every 100th level gets a file.
 fn make_deep(root: &Path, depth: usize) {
@@ -490,6 +503,7 @@ fn make_deep(root: &Path, depth: usize) {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn deep_tree_no_stack_overflow_no_emfile() {
     let tmp = TempDir::new("all-deep");
@@ -503,6 +517,7 @@ fn deep_tree_no_stack_overflow_no_emfile() {
     assert!(!exists(&root));
 }
 
+#[cfg(unix)]
 #[test]
 fn deeper_than_budget_proceeds_instead_of_hanging() {
     // The stack alone exceeds the budget: the walker must not wait for
@@ -524,6 +539,7 @@ fn make_wide(root: &Path) {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn wide_tree_stays_within_open_directory_budget() {
     let tmp = TempDir::new("all-wide");
@@ -554,6 +570,7 @@ fn wide_tree_with_default_budget() {
     assert!(!exists(&root));
 }
 
+#[cfg(unix)]
 /// APFS rejects names that are not valid UTF-8; ext4 and friends accept them.
 fn accepts_raw_bytes(dir: &Path) -> bool {
     use std::ffi::OsStr;
@@ -564,6 +581,7 @@ fn accepts_raw_bytes(dir: &Path) -> bool {
     ok
 }
 
+#[cfg(unix)]
 #[test]
 fn non_utf8_names_are_removed() {
     use std::ffi::OsStr;
@@ -608,6 +626,7 @@ fn legacy_recursive_on_a_file_is_an_error() {
 
 // -- interactive --------------------------------------------------------------
 
+#[cfg(unix)]
 fn interactive_tree(tmp: &TempDir) -> PathBuf {
     let root = tmp.path().join("d");
     write_file(&root.join("f"), 3);
@@ -616,6 +635,7 @@ fn interactive_tree(tmp: &TempDir) -> PathBuf {
     root
 }
 
+#[cfg(unix)]
 #[test]
 fn interactive_all_yes_removes_everything() {
     let tmp = TempDir::new("int-yes");
@@ -644,6 +664,7 @@ fn interactive_all_yes_removes_everything() {
     assert_eq!(asked.len(), 7);
 }
 
+#[cfg(unix)]
 #[test]
 fn interactive_declining_a_file_keeps_it_and_its_parents() {
     let tmp = TempDir::new("int-file");
@@ -662,6 +683,7 @@ fn interactive_declining_a_file_keeps_it_and_its_parents() {
     assert!(!asked.iter().any(|q| q.starts_with("remove directory")));
 }
 
+#[cfg(unix)]
 #[test]
 fn interactive_declining_descend_keeps_subtree() {
     let tmp = TempDir::new("int-descend");
@@ -695,4 +717,701 @@ fn interactive_non_recursive_file_asks_once() {
         vec![format!("remove regular file '{}'?", f.display())]
     );
     assert!(!exists(&f));
+}
+
+#[test]
+fn interactive_empty_directory_is_not_descended() {
+    // GNU asks only `remove directory` for an empty directory.
+    let tmp = TempDir::new("int-empty");
+    let top = tmp.path().join("e");
+    fs::create_dir_all(&top).unwrap();
+    let nested = tmp.path().join("d");
+    fs::create_dir_all(nested.join("empty")).unwrap();
+    write_file(&nested.join("f"), 1);
+
+    let mut asked = Vec::new();
+    let out = remove_all_interactive(
+        &[top.clone(), nested.clone()],
+        &Options::default(),
+        &mut |q| {
+            asked.push(q.to_string());
+            true
+        },
+    );
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert!(!exists(&top));
+    assert!(!exists(&nested));
+    let (t, d) = (top.display(), nested.display());
+    let empty = nested.join("empty");
+    assert_eq!(asked[0], format!("remove directory '{t}'?"));
+    assert_eq!(asked[1], format!("descend into directory '{d}'?"));
+    assert!(asked.contains(&format!("remove directory '{}'?", empty.display())));
+    assert!(!asked.contains(&format!("descend into directory '{}'?", empty.display())));
+    assert!(!asked.contains(&format!("descend into directory '{t}'?")));
+    assert_eq!(asked.len(), 5, "{asked:?}");
+}
+
+// -- dry run ------------------------------------------------------------------
+
+#[cfg(unix)]
+fn mode_of(m: &fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    m.permissions().mode()
+}
+
+#[cfg(not(unix))]
+fn mode_of(m: &fs::Metadata) -> u32 {
+    u32::from(m.permissions().readonly())
+}
+
+/// Every entry below `root` with its type, size and permissions, sorted.
+/// Entries that cannot be read or stat'ed are listed as such.
+fn listing(root: &Path) -> Vec<(PathBuf, &'static str, u64, u32)> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else {
+            out.push((dir, "unreadable", 0, 0));
+            continue;
+        };
+        for e in rd {
+            let p = e.unwrap().path();
+            let Ok(m) = fs::symlink_metadata(&p) else {
+                out.push((p, "unknown", 0, 0));
+                continue;
+            };
+            let kind = if m.is_dir() {
+                stack.push(p.clone());
+                "dir"
+            } else if m.file_type().is_symlink() {
+                "link"
+            } else {
+                "file"
+            };
+            let len = if m.is_file() { m.len() } else { 0 };
+            out.push((p, kind, len, mode_of(&m)));
+        }
+    }
+    out.sort();
+    out
+}
+
+fn same_stats(a: &DeleteStats, b: &DeleteStats) -> bool {
+    (a.files_deleted, a.dirs_deleted, a.total_size)
+        == (b.files_deleted, b.dirs_deleted, b.total_size)
+}
+
+#[test]
+fn dry_run_leaves_a_big_tree_untouched_and_matches_the_real_run() {
+    let tmp = TempDir::new("dry-big");
+    let root = tmp.path().join("big");
+    make_node_modules(&root);
+    // One directory past the inode-sort threshold, nested and empty ones.
+    for i in 0..10_050 {
+        write_file(&root.join(format!("flat/f{i}")), i % 7);
+    }
+    fs::create_dir_all(root.join("e1/e2/e3")).unwrap();
+    write_file(&root.join("x/y/z/w/v.txt"), 11);
+    let loose = tmp.path().join("loose.txt");
+    write_file(&loose, 5);
+    let paths = vec![root.clone(), loose.clone()];
+
+    let before = listing(tmp.path());
+    let mut dry_stats: Option<DeleteStats> = None;
+    for jobs in [0, 1, 3] {
+        let opts = Options {
+            dry_run: true,
+            jobs,
+            ..Options::default()
+        };
+        let out = remove_all(&paths, &opts);
+        assert!(out.is_ok(), "jobs={jobs}: {:?}", out.errors);
+        assert_eq!(listing(tmp.path()), before, "dry run changed the tree");
+        assert_eq!(out.stats.files_deleted, 1440 + 10_050 + 1 + 1);
+        if let Some(prev) = &dry_stats {
+            assert!(same_stats(prev, &out.stats), "{prev:?} vs {:?}", out.stats);
+        }
+        dry_stats = Some(out.stats);
+    }
+
+    let real = remove_all(&paths, &Options::default());
+    assert!(real.is_ok(), "{:?}", real.errors);
+    let dry = dry_stats.unwrap();
+    assert!(
+        same_stats(&dry, &real.stats),
+        "dry {dry:?} real {:?}",
+        real.stats
+    );
+    assert!(!exists(&root));
+    assert!(!exists(&loose));
+}
+
+#[test]
+fn progress_counters_match_returned_stats() {
+    let tmp = TempDir::new("progress");
+    let root = tmp.path().join("nm");
+    make_node_modules(&root);
+    write_file(&root.join("big.bin"), 4096);
+    for dry_run in [true, false] {
+        let progress: &'static Progress = Box::leak(Box::default());
+        let opts = Options {
+            dry_run,
+            progress: Some(progress),
+            ..Options::default()
+        };
+        let out = remove_all(std::slice::from_ref(&root), &opts);
+        assert!(out.is_ok(), "{:?}", out.errors);
+        let load = |a: &std::sync::atomic::AtomicU64| a.load(Ordering::Relaxed);
+        assert_eq!(load(&progress.files), out.stats.files_deleted as u64);
+        assert_eq!(load(&progress.dirs), out.stats.dirs_deleted as u64);
+        assert_eq!(load(&progress.bytes), out.stats.total_size);
+        assert_eq!(out.stats.files_deleted, 1441);
+        assert_eq!(out.stats.dirs_deleted, 241);
+        assert_eq!(exists(&root), dry_run);
+    }
+}
+
+#[test]
+fn interactive_dry_run_asks_but_removes_nothing() {
+    let tmp = TempDir::new("int-dry");
+    let root = tmp.path().join("d");
+    write_file(&root.join("f"), 3);
+    write_file(&root.join("sub").join("g"), 4);
+    fs::create_dir_all(root.join("empty")).unwrap();
+    let before = listing(tmp.path());
+
+    let progress: &'static Progress = Box::leak(Box::default());
+    let opts = Options {
+        dry_run: true,
+        progress: Some(progress),
+        ..Options::default()
+    };
+    let mut asked = Vec::new();
+    let out = remove_all_interactive(std::slice::from_ref(&root), &opts, &mut |q| {
+        asked.push(q.to_string());
+        true
+    });
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert_eq!(listing(tmp.path()), before);
+    assert_eq!(out.stats.files_deleted, 2);
+    assert_eq!(out.stats.dirs_deleted, 3);
+    assert_eq!(out.stats.total_size, 7);
+    assert_eq!(progress.files.load(Ordering::Relaxed), 2);
+    assert_eq!(progress.dirs.load(Ordering::Relaxed), 3);
+    assert_eq!(progress.bytes.load(Ordering::Relaxed), 7);
+    assert_eq!(
+        asked.last().unwrap(),
+        &format!("remove directory '{}'?", root.display())
+    );
+    // descend d, f, descend sub, g, rm sub, rm empty, rm d
+    assert_eq!(asked.len(), 7, "{asked:?}");
+
+    // Declining a file keeps its ancestors, as in a real run.
+    let keep = format!(
+        "remove regular file '{}'?",
+        root.join("sub").join("g").display()
+    );
+    let mut asked = Vec::new();
+    let out = remove_all_interactive(std::slice::from_ref(&root), &opts, &mut |q| {
+        asked.push(q.to_string());
+        q != keep
+    });
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert_eq!(out.stats.dirs_deleted, 1); // only `empty`
+    assert!(!asked.contains(&format!("remove directory '{}'?", root.display())));
+    assert_eq!(listing(tmp.path()), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn dry_run_counts_hard_links_once() {
+    let tmp = TempDir::new("dry-hardlink");
+    let root = tmp.path().join("store");
+    write_file(&root.join("a/blob"), 1000);
+    for i in 0..3 {
+        fs::create_dir_all(root.join(format!("pkg{i}"))).unwrap();
+        fs::hard_link(root.join("a/blob"), root.join(format!("pkg{i}/blob"))).unwrap();
+    }
+    write_file(&root.join("plain"), 10);
+    let before = listing(tmp.path());
+
+    let opts = Options {
+        dry_run: true,
+        ..Options::default()
+    };
+    let dry = remove_all(std::slice::from_ref(&root), &opts);
+    assert!(dry.is_ok(), "{:?}", dry.errors);
+    assert_eq!(listing(tmp.path()), before);
+    assert_eq!(dry.stats.files_deleted, 5);
+    assert_eq!(dry.stats.total_size, 1010);
+
+    let real = remove_all(std::slice::from_ref(&root), &Options::default());
+    assert!(real.is_ok(), "{:?}", real.errors);
+    assert!(
+        same_stats(&dry.stats, &real.stats),
+        "{:?} {:?}",
+        dry.stats,
+        real.stats
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn dry_run_reports_the_same_errors_as_a_real_run() {
+    let tmp = TempDir::new("dry-errors");
+    let ghost = tmp.path().join("ghost");
+    let dir = tmp.path().join("plain-dir");
+    write_file(&dir.join("f"), 1);
+    let empty = tmp.path().join("empty");
+    fs::create_dir_all(&empty).unwrap();
+    let before = listing(tmp.path());
+
+    // Missing operand; directory without -r; -d on a non-empty directory.
+    for (paths, recursive, dir_flag) in [
+        (vec![ghost.clone()], true, false),
+        (vec![dir.clone()], false, false),
+        (vec![dir.clone(), empty.clone()], false, true),
+    ] {
+        let opts = Options {
+            recursive,
+            dir: dir_flag,
+            ..Options::default()
+        };
+        let dry = remove_all(
+            &paths,
+            &Options {
+                dry_run: true,
+                ..opts
+            },
+        );
+        assert_eq!(listing(tmp.path()), before);
+        assert!(!dry.errors.is_empty());
+        let real = remove_all(&paths, &opts);
+        assert_eq!(dry.errors, real.errors);
+        assert!(
+            same_stats(&dry.stats, &real.stats),
+            "{:?} {:?}",
+            dry.stats,
+            real.stats
+        );
+    }
+    assert!(!exists(&empty)); // the last real run removed it
+}
+
+#[cfg(unix)]
+#[test]
+fn dry_run_reports_unreadable_directories_like_a_real_run() {
+    if is_root() {
+        return;
+    }
+    let tmp = TempDir::new("dry-0000");
+    let root = tmp.path().join("tree");
+    let sealed = root.join("sealed");
+    write_file(&sealed.join("f"), 1);
+    write_file(&root.join("g"), 1);
+    set_mode(&sealed, 0o000);
+
+    let dry = remove_all(
+        std::slice::from_ref(&root),
+        &Options {
+            dry_run: true,
+            ..Options::default()
+        },
+    );
+    assert!(exists(&root.join("g")));
+    let real = remove_all(std::slice::from_ref(&root), &Options::default());
+    set_mode(&sealed, 0o755);
+    let expected = vec![format!(
+        "cannot remove '{}': Permission denied",
+        sealed.display()
+    )];
+    assert_eq!(dry.errors, expected);
+    assert_eq!(real.errors, expected);
+    assert!(
+        same_stats(&dry.stats, &real.stats),
+        "{:?} {:?}",
+        dry.stats,
+        real.stats
+    );
+}
+
+// -- -f and ENOTDIR -------------------------------------------------------------
+
+#[cfg(unix)]
+#[test]
+fn force_ignores_operand_below_a_file() {
+    // GNU: `rm -f file.txt/x` is silent and succeeds.
+    let tmp = TempDir::new("enotdir");
+    let file = tmp.path().join("file.txt");
+    write_file(&file, 1);
+    let bogus = file.join("x");
+    let forced = Options {
+        force: true,
+        ..Options::default()
+    };
+
+    let out = remove_all(std::slice::from_ref(&bogus), &forced);
+    assert!(out.is_ok(), "{:?}", out.errors);
+    let mut asked = 0;
+    let out = remove_all_interactive(std::slice::from_ref(&bogus), &forced, &mut |_| {
+        asked += 1;
+        true
+    });
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert_eq!(asked, 0);
+
+    let out = remove_all(std::slice::from_ref(&bogus), &Options::default());
+    assert_eq!(
+        out.errors,
+        vec![format!(
+            "cannot remove '{}': Not a directory",
+            bogus.display()
+        )]
+    );
+    assert!(file.exists());
+}
+
+// -- one file system ------------------------------------------------------------
+
+#[cfg(unix)]
+fn skip_msg(p: &Path) -> String {
+    format!(
+        "skipping '{}', since it's on a different device",
+        p.display()
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn one_file_system_skips_directories_on_another_device() {
+    // The hook makes every subdirectory look like a mount point.
+    let tmp = TempDir::new("xdev-hook");
+    let root = tmp.path().join("tree");
+    write_file(&root.join("a/f"), 1);
+    write_file(&root.join("b/c/g"), 1);
+    write_file(&root.join("top.txt"), 1);
+    let before = listing(tmp.path());
+    let xdev = Options {
+        one_file_system: true,
+        ..Options::default()
+    };
+
+    rmx_lib::__set_pretend_other_device(true);
+    let dry = remove_all(
+        std::slice::from_ref(&root),
+        &Options {
+            dry_run: true,
+            ..xdev
+        },
+    );
+    let out = remove_all(std::slice::from_ref(&root), &xdev);
+    rmx_lib::__set_pretend_other_device(false);
+
+    let mut expected = vec![skip_msg(&root.join("a")), skip_msg(&root.join("b"))];
+    expected.sort();
+    for (what, mut errors) in [("dry", dry.errors), ("real", out.errors)] {
+        errors.sort();
+        assert_eq!(errors, expected, "{what}");
+    }
+    assert_eq!(dry.stats.files_deleted, 1);
+    assert_eq!(dry.stats.dirs_deleted, 0);
+    // Only the top-level file went; the skipped directories and therefore
+    // the operand stay, without a "Directory not empty" error.
+    assert!(!exists(&root.join("top.txt")));
+    assert!(root.join("a/f").exists());
+    assert!(root.join("b/c/g").exists());
+    assert_eq!(out.stats.files_deleted, 1);
+    assert_eq!(out.stats.dirs_deleted, 0);
+    assert_eq!(before.len() - 1, listing(tmp.path()).len());
+}
+
+#[cfg(unix)]
+#[test]
+fn one_file_system_off_ignores_devices() {
+    let tmp = TempDir::new("xdev-off");
+    let root = tmp.path().join("tree");
+    write_file(&root.join("a/f"), 1);
+    rmx_lib::__set_pretend_other_device(true);
+    let out = remove_all(std::slice::from_ref(&root), &Options::default());
+    write_file(&root.join("a/f"), 1);
+    let int = remove_all_interactive(
+        std::slice::from_ref(&root),
+        &Options::default(),
+        &mut |_| true,
+    );
+    rmx_lib::__set_pretend_other_device(false);
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert!(int.is_ok(), "{:?}", int.errors);
+    assert!(!exists(&root));
+}
+
+#[cfg(unix)]
+#[test]
+fn interactive_one_file_system_skips_other_devices() {
+    let tmp = TempDir::new("xdev-int");
+    let root = tmp.path().join("tree");
+    write_file(&root.join("f"), 1);
+    write_file(&root.join("sub/g"), 1);
+    let opts = Options {
+        one_file_system: true,
+        ..Options::default()
+    };
+    let mut asked = Vec::new();
+    rmx_lib::__set_pretend_other_device(true);
+    let out = remove_all_interactive(std::slice::from_ref(&root), &opts, &mut |q| {
+        asked.push(q.to_string());
+        true
+    });
+    rmx_lib::__set_pretend_other_device(false);
+    assert_eq!(out.errors, vec![skip_msg(&root.join("sub"))]);
+    assert!(!exists(&root.join("f")));
+    assert!(root.join("sub/g").exists());
+    assert!(
+        !asked.iter().any(|q| q.starts_with("remove directory")),
+        "{asked:?}"
+    );
+}
+
+/// Needs root and a container started with --privileged (or a real host);
+/// returns early when tmpfs cannot be mounted.
+#[cfg(target_os = "linux")]
+#[test]
+fn one_file_system_stops_at_a_real_mount_point() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    if !is_root() {
+        return;
+    }
+    let tmp = TempDir::new("xdev-mount");
+    let root = tmp.path().join("tree");
+    let mnt = root.join("mnt");
+    fs::create_dir_all(&mnt).unwrap();
+    write_file(&root.join("a/f"), 1);
+    let target = CString::new(mnt.as_os_str().as_bytes()).unwrap();
+    // SAFETY: valid C strings, no mount data.
+    let rc = unsafe {
+        libc::mount(
+            c"tmpfs".as_ptr(),
+            target.as_ptr(),
+            c"tmpfs".as_ptr(),
+            0,
+            std::ptr::null(),
+        )
+    };
+    if rc != 0 {
+        eprintln!(
+            "skipped: cannot mount tmpfs: {}",
+            std::io::Error::last_os_error()
+        );
+        return;
+    }
+    struct Unmount(CString);
+    impl Drop for Unmount {
+        fn drop(&mut self) {
+            // SAFETY: valid C string.
+            unsafe { libc::umount2(self.0.as_ptr(), libc::MNT_DETACH) };
+        }
+    }
+    let guard = Unmount(target);
+    write_file(&mnt.join("inside/g"), 1);
+    let xdev = Options {
+        one_file_system: true,
+        ..Options::default()
+    };
+
+    let dry = remove_all(
+        std::slice::from_ref(&root),
+        &Options {
+            dry_run: true,
+            ..xdev
+        },
+    );
+    assert_eq!(dry.errors, vec![skip_msg(&mnt)]);
+    assert!(root.join("a/f").exists());
+
+    let out = remove_all(std::slice::from_ref(&root), &xdev);
+    assert_eq!(out.errors, vec![skip_msg(&mnt)]);
+    assert!(mnt.join("inside/g").exists());
+    assert!(!exists(&root.join("a")));
+    assert!(exists(&root));
+    assert!(
+        same_stats(&dry.stats, &out.stats),
+        "{:?} {:?}",
+        dry.stats,
+        out.stats
+    );
+    eprintln!("ran: tmpfs mount point skipped");
+    drop(guard);
+}
+
+// -- force writable -------------------------------------------------------------
+
+/// Make `p` and every directory below it u+rwx again so cleanup works.
+#[cfg(unix)]
+fn unlock_tree(p: &Path) {
+    let Ok(m) = fs::symlink_metadata(p) else {
+        return;
+    };
+    if !m.is_dir() {
+        return;
+    }
+    set_mode(p, 0o755);
+    if let Ok(rd) = fs::read_dir(p) {
+        for e in rd.flatten() {
+            unlock_tree(&e.path());
+        }
+    }
+}
+
+/// Set every file to `file_mode` and every directory to `dir_mode`,
+/// bottom-up.
+#[cfg(unix)]
+fn lock_tree(p: &Path, dir_mode: u32, file_mode: u32) {
+    let m = fs::symlink_metadata(p).unwrap();
+    if m.is_dir() {
+        for e in fs::read_dir(p).unwrap() {
+            lock_tree(&e.unwrap().path(), dir_mode, file_mode);
+        }
+        set_mode(p, dir_mode);
+    } else if m.is_file() {
+        set_mode(p, file_mode);
+    }
+}
+
+/// A Go module cache: everything read-only, plus one unreadable and one
+/// unsearchable directory. Returns (files, dirs) including `root`.
+#[cfg(unix)]
+fn make_mod_cache(root: &Path) -> (usize, usize) {
+    for m in 0..40 {
+        for d in ["", "internal", "internal/x"] {
+            for f in 0..5 {
+                let rel = format!("github.com/u/m{m}@v1.0.0/{d}/f{f}.go");
+                write_file(&root.join(rel), 10);
+            }
+        }
+    }
+    write_file(&root.join("cache/download/sealed/f"), 3);
+    write_file(&root.join("cache/download/noexec/f"), 3);
+    let all = listing(root);
+    let files = all.iter().filter(|e| e.1 == "file").count();
+    let dirs = all.iter().filter(|e| e.1 == "dir").count() + 1;
+    lock_tree(root, 0o555, 0o444);
+    set_mode(&root.join("cache/download/sealed"), 0o000);
+    set_mode(&root.join("cache/download/noexec"), 0o600);
+    (files, dirs)
+}
+
+#[cfg(unix)]
+#[test]
+fn force_writable_removes_a_read_only_module_cache() {
+    for jobs in [0, 1, 3] {
+        let tmp = TempDir::new("w-modcache");
+        let root = tmp.path().join("mod");
+        let (files, dirs) = make_mod_cache(&root);
+        let opts = Options {
+            force_writable: true,
+            jobs,
+            ..Options::default()
+        };
+        let out = remove_all(std::slice::from_ref(&root), &opts);
+        unlock_tree(&root);
+        assert!(out.is_ok(), "jobs={jobs}: {:?}", out.errors);
+        assert!(!exists(&root), "jobs={jobs}");
+        assert_eq!(out.stats.files_deleted, files, "jobs={jobs}");
+        assert_eq!(out.stats.dirs_deleted, dirs, "jobs={jobs}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn read_only_module_cache_fails_without_force_writable() {
+    if is_root() {
+        return; // root ignores directory permissions
+    }
+    let tmp = TempDir::new("w-modcache-off");
+    let root = tmp.path().join("mod");
+    make_mod_cache(&root);
+    let out = remove_all(std::slice::from_ref(&root), &Options::default());
+    unlock_tree(&root);
+    assert!(!out.errors.is_empty());
+    assert!(
+        out.errors
+            .iter()
+            .all(|e| e.ends_with(": Permission denied")),
+        "{:?}",
+        out.errors
+    );
+    let sealed = root.join("cache/download/sealed");
+    assert!(out.errors.contains(&format!(
+        "cannot remove '{}': Permission denied",
+        sealed.display()
+    )));
+    assert!(exists(&root));
+    assert_eq!(out.stats.files_deleted, 0);
+
+    // A dry run never chmods, so it cannot see inside the sealed directory.
+    let again = tmp.path().join("again");
+    make_mod_cache(&again);
+    let before = listing(&again);
+    let dry = remove_all(
+        std::slice::from_ref(&again),
+        &Options {
+            dry_run: true,
+            force_writable: true,
+            ..Options::default()
+        },
+    );
+    let after = listing(&again);
+    unlock_tree(&again);
+    assert_eq!(before, after);
+    assert_eq!(
+        dry.errors,
+        vec![format!(
+            "cannot remove '{}': Permission denied",
+            again.join("cache/download/sealed").display()
+        )]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn force_writable_handles_operands_in_read_only_directories() {
+    let tmp = TempDir::new("w-operands");
+    let ro = tmp.path().join("ro");
+    write_file(&ro.join("a.txt"), 1);
+    write_file(&ro.join("sub/b.txt"), 1);
+    set_mode(&ro, 0o555);
+    let paths = vec![ro.join("a.txt"), ro.join("sub")];
+
+    if !is_root() {
+        let out = remove_all(&paths, &Options::default());
+        assert_eq!(out.errors.len(), 2, "{:?}", out.errors);
+        assert!(exists(&ro.join("a.txt")));
+    }
+    let opts = Options {
+        force_writable: true,
+        ..Options::default()
+    };
+    let out = remove_all(&paths, &opts);
+    set_mode(&ro, 0o755);
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert_eq!(fs::read_dir(&ro).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn interactive_force_writable_removes_a_read_only_tree() {
+    let tmp = TempDir::new("w-int");
+    let root = tmp.path().join("mod");
+    let (files, dirs) = make_mod_cache(&root);
+    let opts = Options {
+        force_writable: true,
+        ..Options::default()
+    };
+    let out = remove_all_interactive(std::slice::from_ref(&root), &opts, &mut |_| true);
+    unlock_tree(&root);
+    assert!(out.is_ok(), "{:?}", out.errors);
+    assert!(!exists(&root));
+    assert_eq!(out.stats.files_deleted, files);
+    assert_eq!(out.stats.dirs_deleted, dirs);
 }
