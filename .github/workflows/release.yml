@@ -189,7 +189,7 @@ jobs:
       - name: Regenerate formula
         run: scripts/update-formula.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/SHA256SUMS.txt"
 
-      - name: Regenerate AUR PKGBUILD
+      - name: Regenerate AUR packages (rmx, rmx-fast-bin)
         run: scripts/update-aur.sh "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/SHA256SUMS.txt" packaging/aur
 
       - name: Commit to main
@@ -221,27 +221,29 @@ jobs:
         with:
           ref: main
 
-      - name: Push PKGBUILD and .SRCINFO to the AUR
+      - name: Push PKGBUILDs and .SRCINFOs to the AUR
         if: env.AUR_KEY != ''
         run: |
           set -euo pipefail
-          pkg=$(sed -n 's/^pkgname=//p' packaging/aur/PKGBUILD)
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$AUR_KEY" > ~/.ssh/aur && chmod 600 ~/.ssh/aur
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
-          git clone "ssh://aur@aur.archlinux.org/$pkg.git" "$RUNNER_TEMP/aur"
-          cp packaging/aur/PKGBUILD packaging/aur/.SRCINFO "$RUNNER_TEMP/aur/"
-          cd "$RUNNER_TEMP/aur"
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "AUR already at this version"
-            exit 0
-          fi
-          git config user.name "Otabek Ismoilov"
-          git config user.email "ismoilovdev@gmail.com"
-          git add PKGBUILD .SRCINFO
-          git commit -m "Update to ${GITHUB_REF_NAME#v}"
-          git push origin HEAD:master
+          for dir in packaging/aur/*/; do
+            pkg=$(basename "$dir")
+            work="$RUNNER_TEMP/aur-$pkg"
+            git clone "ssh://aur@aur.archlinux.org/$pkg.git" "$work"
+            cp "$dir/PKGBUILD" "$dir/.SRCINFO" "$work/"
+            if [ -z "$(git -C "$work" status --porcelain)" ]; then
+              echo "$pkg: already at this version"
+              continue
+            fi
+            git -C "$work" add PKGBUILD .SRCINFO
+            git -C "$work" -c user.name="Otabek Ismoilov" -c user.email="ismoilovdev@gmail.com" \
+              commit -qm "Update to ${GITHUB_REF_NAME#v}"
+            git -C "$work" push origin HEAD:master
+            echo "$pkg: pushed ${GITHUB_REF_NAME#v}"
+          done
 
       - name: Skipped
         if: env.AUR_KEY == ''
