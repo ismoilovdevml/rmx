@@ -3,28 +3,28 @@
 class Rmx < Formula
   desc "Fast alternative to rm command written in Rust"
   homepage "https://github.com/ismoilovdevml/rmx"
-  version "0.8.0"
+  version "0.9.0"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.8.0/rmx-aarch64-apple-darwin.tar.gz"
-      sha256 "c9587236f848c9c60fbf7030e190dd3b894246827f23c73d5bdb4fdcc23ab64c"
+      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.9.0/rmx-aarch64-apple-darwin.tar.gz"
+      sha256 "cddb51290b251df57148aaa88b09dd7d9cec5046dc3fd1a4c88567ddec983982"
     end
     on_intel do
-      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.8.0/rmx-x86_64-apple-darwin.tar.gz"
-      sha256 "08ac83c1c76c4a497f83f93273d78bff9724ab61a7e48ae7926e79643f5ad8cd"
+      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.9.0/rmx-x86_64-apple-darwin.tar.gz"
+      sha256 "b3da77e0b968c1a6faada2422eeec3130b6bddec0c4957d0178c533968944365"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.8.0/rmx-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "f443d1943c7cb82dd2d60cb8399da00d4ae2f53a7a391ac4253799e02d952119"
+      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.9.0/rmx-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "9903c6ef8afd48a09ef1e6ae0358b0a119b36940012819830cce0f44d23d9e3e"
     end
     on_intel do
-      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.8.0/rmx-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "a2982b08c242fd150a48614d4c0519f12055be9d2b5c77e5d42634223c4740ef"
+      url "https://github.com/ismoilovdevml/rmx/releases/download/v0.9.0/rmx-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "7004f0fdcc8260fc9c930fb2ee7011e9c600ffe3432b949c26d8f38e1c06bf16"
     end
   end
 
